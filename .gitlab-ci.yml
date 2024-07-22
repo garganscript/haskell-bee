@@ -55,7 +55,6 @@ integration-tests:
   services:
     - name: docker.io/cgenie/pgmq:16-1.3.3.1
       alias: pgmq
-  services:
     - name: docker.io/redis:7.2
       alias: redis
   variables:
