@@ -6,6 +6,9 @@ License     : AGPL
 Maintainer  : gargantext@iscpif.fr
 Stability   : experimental
 Portability : POSIX
+
+Asynchronous worker.
+
 -}
 
 {-# LANGUAGE FlexibleContexts #-}
@@ -14,8 +17,12 @@ Portability : POSIX
 
 
 module Async.Worker
-  ( run
+  ( -- * Running
+    run
+    -- * Sending jobs
   , sendJob
+  -- ** 'SendJob' wrappers
+  -- $sendJob
   , mkDefaultSendJob
   , mkDefaultSendJob'
   , sendJob'
@@ -23,7 +30,11 @@ module Async.Worker
 where
 
 
+{- | 'Broker' class type for the underlying broker
+-}
 import Async.Worker.Broker
+{- | Various worker types, in particular 'State'
+-}
 import Async.Worker.Types
 import Control.Exception.Safe (catch, fromException, throwIO, SomeException)
 import Control.Monad (forever)
@@ -148,7 +159,12 @@ handleJobError state@(State { .. }) je@(JobException {  .. }) = do
   case errorStrategy mdata of
     ESDelete -> deleteMessage broker queueName msgId
     ESArchive -> deleteMessage broker queueName msgId
-    ESRepeat -> return ()
+    ESRepeatNElseArchive n -> do
+      let readCt = readCount mdata
+      if readCt >= n then
+        archiveMessage broker queueName msgId
+      else
+        sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
 
 handleUnknownError :: (HasWorkerBroker b a) => State b a -> SomeException -> IO ()
 handleUnknownError state err = do
@@ -162,8 +178,10 @@ microsecond :: Int
 microsecond = 10^(6 :: Int)
 
 
--- Job has quite a few metadata. Here are some utilities for
--- constructing them more easily
+{- $sendJob
+ A worker job has quite a few metadata. Here are some utilities for
+ constructing them more easily.
+-}
 
 -- | Wraps parameters for the 'sendJob' function
 data (HasWorkerBroker b a) => SendJob b a =

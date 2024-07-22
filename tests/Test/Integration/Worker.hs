@@ -194,7 +194,7 @@ workerTests brokerInitParams =
       queueLen2 <- BT.getQueueSize broker queueName
       queueLen2 `shouldBe` 0
 
-    it "can handle a job with error (with repeat)" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "can handle a job with error (with repeat n)" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
       -- no events initially
       events1 <- readTVarIO events
       events1 `shouldBe` []
@@ -203,10 +203,11 @@ workerTests brokerInitParams =
       queueLen1 `shouldBe` 0
 
       let msg = Error
-      let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESRepeat }
+      let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESRepeatNElseArchive 1 }
       sendJob' job
  
-      waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
+      waitUntilTVarEq events [ EMessageReceived msg, EJobError msg
+                             , EMessageReceived msg, EJobError msg ] 500
 
       -- NOTE It doesn't make sense to check queue size here, the
       -- worker just continues to run the errored task in background

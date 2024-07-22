@@ -6,6 +6,8 @@ License     : AGPL
 Maintainer  : gargantext@iscpif.fr
 Stability   : experimental
 Portability : POSIX
+
+Broker typeclass definition.
 -}
 
 
@@ -17,6 +19,8 @@ Portability : POSIX
     
 module Async.Worker.Broker.Types
   ( Queue
+  -- * Main broker typeclass
+  -- $broker
   , HasBroker(..)
   , SerializableMessage
   )
@@ -30,26 +34,31 @@ import Data.Typeable (Typeable)
 type Queue = String
 
 
-{- NOTE There are 3 types of messages here:
- - 'a' the underlying, user-defined message
- - 'Job a' worker definition, containing message metadata
- - 'BrokerMessage message m', i.e. for PGMQ, it returns things like:
-   msgId, readCt, enqueuedAt, vt
+{- $broker
+/NOTE/ There are 3 types of messages here:
 
- - 'a' is read-write
- - 'Job a' is read-write
- - 'BrokerMessage' is read-only, i.e. we can't save it to broker and
+ * 'a' the underlying, user-defined message
+ * 'Async.Worker.Types.Job' 'a' worker definition, containing message metadata
+ * 'BrokerMessage' 'message' 'm', i.e. for 'PGMQ', it returns things
+   like: 'Database.Broker.PGMQ.Simple.msgId',
+   'Database.Broker.PGMQ.Simple.readCt',
+   'Database.Broker.PGMQ.Simple.enqueuedAt',
+   'Database.Broker.PGMQ.Simple.vt'
+
+Also:
+
+ * 'a' is read-write
+ * 'Async.Worker.Types.Job' 'a' is read-write
+ * 'BrokerMessage' is read-only, i.e. we can't save it to broker and
    it doesn't make sense to construct it on Haskell side. Instead, we
-   save 'Job a' and get 'BrokerMessage' when reading. In this sense,
+   save 'Job' 'a' and get 'BrokerMessage' when reading. In this sense,
    read and send are not symmetrical (similarly, Opaleye has Read and
    Write tables).
 -}
 
--- | So this is the broker message that contains our message inside
--- class BrokerMessage brokerMessage message where
---   getMessage :: brokerMessage -> message
-
-
+-- | We want to assert some way to serialize a message. JSON is
+-- assumed here. This isn't strictly broker-related but nevertheless
+-- is useful.
 type SerializableMessage a = ( FromJSON a
                              , ToJSON a
                              -- NOTE This shouldn't be necessary
@@ -58,8 +67,6 @@ type SerializableMessage a = ( FromJSON a
 {-|
   This is an interface for basic broker functionality.
 -}
--- class Broker broker brokerMessage message msgId | brokerMessage -> message, brokerMessage -> msgId where
-
 class (
         Eq (MessageId b)
       , Show (MessageId b)
@@ -67,33 +74,37 @@ class (
       ) => HasBroker b a where
   -- | Data representing the broker
   data family Broker b a :: Type
-  -- | Data represenging message that is returned by broker
+  -- | Data represenging message that is returned by broker. You're
+  -- not supposed to construct this type yourself (in similar spirit,
+  -- Opaleye uses 'selectTable'
+  -- https://hackage.haskell.org/package/opaleye-0.10.3.1/docs/Opaleye-Table.html#v:selectTable)
   data family BrokerMessage b a :: Type
-  -- | Data that we serialize into broker
+  -- | Data that we serialize into broker (worker will wrap this into
+  -- 'Async.Worker.Types.Job' 'a')
   data family Message b a :: Type
-  -- | How to get the message id (needed for delete/archive operations)
+  -- | The message id type (needed for delete/archive operations)
   data family MessageId b :: Type
 
+  -- | All the parameters needed for broker intialization
   data family BrokerInitParams b a :: Type
 
   -- The following are just constructors and deconstructors for the
   -- 'BrokerMessage', 'Message' data types
   
-  -- | Operation for getting the message id from 'BrokerMessage'
-  -- messageId :: (Eq (MessageId b), Show (MessageId b)) => BrokerMessage b a -> MessageId b
+  -- | Operation for getting the 'MessageId' from 'BrokerMessage'
   messageId :: BrokerMessage b a -> MessageId b
   
   -- | 'BrokerMessage' contains 'Message' inside, this is a
   -- deconstructor for 'BrokerMessage'
   getMessage :: BrokerMessage b a -> Message b a
 
-  -- | Convert 'a' to 'Message b a'
+  -- | Convert 'a' to 'Message' 'b' 'a'
   toMessage :: a -> Message b a
-  -- | Convert 'Message b a' to 'a'
+  -- | Convert 'Message' 'b' 'a' to 'a'
   toA :: Message b a -> a
 
   
-  -- | Initialize broker
+  -- | Initialize broker with given 'BrokerInitParams'.
   initBroker :: BrokerInitParams b a -> IO (Broker b a)
   -- | Deconstruct broker (e.g. close DB connection)
   deinitBroker :: Broker b a -> IO ()
@@ -107,11 +118,9 @@ class (
   dropQueue :: Broker b a -> Queue -> IO ()
 
   {-| Read message, waiting for it if not present -}
-  -- readMessageWaiting :: SerializableMessage a => Broker b a -> Queue -> IO (BrokerMessage b a)
   readMessageWaiting :: Broker b a -> Queue -> IO (BrokerMessage b a)
 
   {-| Send message -}
-  -- sendMessage :: SerializableMessage a => Broker b a -> Queue -> Message b a -> IO ()
   sendMessage :: Broker b a -> Queue -> Message b a -> IO ()
 
   {-| Delete message -}
