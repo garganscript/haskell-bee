@@ -17,7 +17,6 @@ Portability : POSIX
     
 module Async.Worker.Broker.Types
   ( Queue
-  -- , HasMessageId(..)
   , HasBroker(..)
   , SerializableMessage
   )
@@ -29,19 +28,6 @@ import Data.Typeable (Typeable)
 
 
 type Queue = String
-
-
-{-| A message in the queue system must have some properties. In
-  particular, it must have some sort of 'id'.
--}
--- class (Eq msgId, Show msgId, Typeable msgId) => HasMessageId msg msgId where
---   messageId :: msg -> msgId
-  
--- class HasMessageId m where
---   data family Message m :: Type
---   type family MessageId m :: Type
-  
---   messageId :: Message m -> MessageId m
 
 
 {- NOTE There are 3 types of messages here:

@@ -28,7 +28,7 @@ import Control.Exception (bracket, Exception, throwIO)
 import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
 import Data.Set qualified as Set
 import Test.Hspec
-import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName)
+import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntilTVarEq, waitUntilTVarPred)
 
 
 data TestEnv b =
@@ -152,10 +152,7 @@ workerTests brokerInitParams =
       let job = mkDefaultSendJob' broker queueName msg
       sendJob' job
  
-      threadDelay (500 * millisecond)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobFinished msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobFinished msg ] 500
 
         -- queue should be empty
       queueLen2 <- BT.getQueueSize broker queueName
@@ -173,10 +170,7 @@ workerTests brokerInitParams =
       let job = mkDefaultSendJob' broker queueName msg
       sendJob' job
  
-      threadDelay (500 * millisecond)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobError msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
 
       -- queue should be empty (error jobs archived by default)
       queueLen2 <- BT.getQueueSize broker queueName
@@ -194,10 +188,7 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESDelete }
       sendJob' job
  
-      threadDelay (500 * millisecond)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobError msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
 
       -- queue should be empty (error job deleted)
       queueLen2 <- BT.getQueueSize broker queueName
@@ -215,10 +206,7 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESRepeat }
       sendJob' job
  
-      threadDelay (100 * millisecond)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobError msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
 
       -- NOTE It doesn't make sense to check queue size here, the
       -- worker just continues to run the errored task in background
@@ -237,10 +225,7 @@ workerTests brokerInitParams =
       let job = mkDefaultSendJob broker queueName msg 1
       sendJob' job
  
-      threadDelay (2*second)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobTimeout msg ]
+      waitUntilTVarPred events (\e -> take 2 e == [ EMessageReceived msg, EJobTimeout msg ]) 2500
 
       -- NOTE It doesn't make sense to check queue size here, the
       -- worker just continues to run the errored task in background
@@ -259,10 +244,7 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSArchive }
       sendJob' job
  
-      threadDelay (2*second)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobTimeout msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 2500
 
       -- Queue should be empty, since we archive timed out jobs
       queueLen2 <- BT.getQueueSize broker queueName
@@ -280,10 +262,7 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSDelete }
       sendJob' job
  
-      threadDelay (2*second)
- 
-      events2 <- readTVarIO events
-      events2 `shouldBe` [ EMessageReceived msg, EJobTimeout msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 2500
 
       -- Queue should be empty, since we archive timed out jobs
       queueLen2 <- BT.getQueueSize broker queueName
@@ -301,12 +280,9 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSRepeatNElseArchive 1 }
       sendJob' job
  
-      threadDelay (3*second)
- 
-      events2 <- readTVarIO events
       -- | Should have been run 2 times, then archived
-      events2 `shouldBe` [ EMessageReceived msg, EJobTimeout msg
-                         , EMessageReceived msg, EJobTimeout msg ]
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg
+                             , EMessageReceived msg, EJobTimeout msg ] 3500
 
       -- Queue should be empty, since we archive timed out jobs
       queueLen2 <- BT.getQueueSize broker queueName
@@ -329,13 +305,11 @@ workerTests brokerInitParams =
       let job2 = mkDefaultSendJob' broker queueName msg2
       sendJob' job2
  
-      threadDelay (500 * millisecond)
- 
-      events2 <- readTVarIO events
       -- The jobs don't have to be process exactly in this order so we just use Set here
-      Set.fromList events2 `shouldBe`
-        Set.fromList [ EMessageReceived msg1, EJobFinished msg1
-                     , EMessageReceived msg2, EJobFinished msg2 ]
+      waitUntilTVarPred events (
+        \e -> Set.fromList e == Set.fromList 
+          [ EMessageReceived msg1, EJobFinished msg1
+          , EMessageReceived msg2, EJobFinished msg2 ]) 500
 
       -- queue should be empty
       queueLen2 <- BT.getQueueSize broker queueName
@@ -357,12 +331,10 @@ workerTests brokerInitParams =
       let job = mkDefaultSendJob' broker queueName msg
       sendJob' job
  
-      threadDelay (500 * millisecond)
- 
-      events2 <- readTVarIO events
-      Set.fromList events2 `shouldBe`
-        Set.fromList [ EMessageReceived msgErr, EJobError msgErr
-                     , EMessageReceived msg, EJobFinished msg ]
+      waitUntilTVarPred events (
+        \e -> Set.fromList e ==
+          Set.fromList [ EMessageReceived msgErr, EJobError msgErr
+                       , EMessageReceived msg, EJobFinished msg ]) 500
 
       -- queue should be empty
       queueLen2 <- BT.getQueueSize broker queueName
