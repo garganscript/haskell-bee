@@ -24,7 +24,9 @@ aesonPropTests = testGroup "Aeson (de-)serialization property tests" $
 instance QC.Arbitrary WT.ArchiveStrategy where
   arbitrary = QC.elements [ WT.ASDelete, WT.ASArchive ]
 instance QC.Arbitrary WT.ErrorStrategy where 
-  arbitrary = QC.elements [ WT.ESDelete, WT.ESArchive, WT.ESRepeat ]
+  arbitrary = do
+    n <- arbitrary
+    QC.elements [ WT.ESDelete, WT.ESArchive, WT.ESRepeatNElseArchive n ]
 instance QC.Arbitrary WT.TimeoutStrategy where 
   arbitrary = do
     n <- arbitrary
