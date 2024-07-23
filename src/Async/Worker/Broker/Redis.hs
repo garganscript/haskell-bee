@@ -19,9 +19,11 @@ https://redis.io/glossary/redis-queue/
     
 module Async.Worker.Broker.Redis
   ( RedisBroker
-  , BrokerInitParams(..) )
+  , BrokerInitParams(..)
+  , RedisWithMsgId(..) )
 where
 
+import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object)
 import Async.Worker.Broker.Types (HasBroker(..), SerializableMessage)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
@@ -37,7 +39,8 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
     RedisBroker' {
         conn :: Redis.Connection
       }
-  data BrokerMessage RedisBroker a = RedisBM a
+  data BrokerMessage RedisBroker a =
+    RedisBM (RedisWithMsgId a)
     deriving (Show)
   data Message RedisBroker a = RedisM a
   data MessageId RedisBroker = RedisMid Int
@@ -46,8 +49,8 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
 
   -- We're using simple QUEUE so we don't care about message id as we
   -- won't be deleting/archiving the messages
-  messageId _ = RedisMid 0
-  getMessage (RedisBM msg) = RedisM msg
+  messageId (RedisBM (RedisWithMsgId { rmidId })) = RedisMid rmidId
+  getMessage (RedisBM (RedisWithMsgId { rmida })) = RedisM rmida
   toMessage message = RedisM message
   toA (RedisM message) = message
   initBroker (RedisBrokerInitParams connInfo) = do
@@ -76,8 +79,14 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
             Just dmsg -> return $ RedisBM dmsg
             Nothing -> undefined
 
-  sendMessage (RedisBroker' { conn }) queue (RedisM message) =
-    void $ Redis.runRedis conn $ Redis.lpush (BS.pack queue) [BSL.toStrict $ Aeson.encode message]
+  sendMessage (RedisBroker' { conn }) queue (RedisM message) = do
+    let key = "key-" <> queue
+    eId <- Redis.runRedis conn $ Redis.incr $ BS.pack key
+    case eId of
+      Left _err -> undefined
+      Right id' -> do
+        let m = RedisWithMsgId { rmidId = fromIntegral id', rmida = message }
+        void $ Redis.runRedis conn $ Redis.lpush (BS.pack queue) [BSL.toStrict $ Aeson.encode m]
 
   -- deleteMessage (RedisBroker' { conn }) queue (RedisMid msgId) = do
   deleteMessage _broker _queue _msgId = do
@@ -96,3 +105,20 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
       Left _ -> return 0
 
 
+-- | Helper datatype to store message with a unique id.
+-- We fetch the id by using 'INCR'
+-- https://redis.io/docs/latest/commands/incr/
+data RedisWithMsgId a =
+  RedisWithMsgId { rmida  :: a
+                 , rmidId :: Int }
+  deriving (Show, Eq)
+instance FromJSON a => FromJSON (RedisWithMsgId a) where
+  parseJSON = withObject "RedisWithMsgId" $ \o -> do
+    rmida <- o .: "rmida"
+    rmidId <- o .: "rmidId"
+    return $ RedisWithMsgId { rmida, rmidId }
+instance ToJSON a => ToJSON (RedisWithMsgId a) where
+  toJSON (RedisWithMsgId { .. }) = toJSON $ object [
+      "rmida" .= rmida
+    , "rmidId" .= rmidId
+    ]

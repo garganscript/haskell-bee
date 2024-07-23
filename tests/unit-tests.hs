@@ -2,6 +2,7 @@
 
 module Main where
 
+import Async.Worker.Broker.Redis qualified as R
 import Async.Worker.Types qualified as WT
 import Data.Aeson qualified as Aeson
 import Test.Tasty
@@ -19,7 +20,8 @@ propertyTests = testGroup "Property tests" [aesonPropTests]
     
 aesonPropTests = testGroup "Aeson (de-)serialization property tests" $
  [ aesonPropJobMetadataTests
- , aesonPropJobTests ]
+ , aesonPropJobTests
+ , aesonPropRedisTests ]
 
 instance QC.Arbitrary WT.ArchiveStrategy where
   arbitrary = QC.elements [ WT.ASDelete, WT.ASArchive ]
@@ -58,6 +60,19 @@ aesonPropJobTests = testGroup "Aeson WT.Job (de-)serialization tests" $
   [ QC.testProperty "Aeson.decode . Aeson.encode == id" $
       \j ->
         Aeson.decode (Aeson.encode (j :: WT.Job String)) == Just j
+  ]
+
+
+instance QC.Arbitrary a => QC.Arbitrary (R.RedisWithMsgId a) where
+  arbitrary = do
+    rmidId <- arbitrary
+    rmida <- arbitrary
+    return $ R.RedisWithMsgId { rmida, rmidId }
+
+aesonPropRedisTests = testGroup "Aeson RedisWithMsgId (de-)serialization tests" $
+  [ QC.testProperty "Aeson.decode . Aeson.encode == id" $
+     \j ->
+       Aeson.decode (Aeson.encode (j :: R.RedisWithMsgId String)) == Just j
   ]
 
     
