@@ -17,7 +17,7 @@ import Database.Redis qualified as Redis
 import System.Environment (lookupEnv)
 import System.Timeout qualified as Timeout
 import Test.Hspec (expectationFailure, shouldBe, shouldSatisfy, Expectation, HasCallStack)
-import Test.RandomStrings (randomASCII, randomString, onlyAlphaNum)
+import Test.RandomStrings (randomASCII, randomString, onlyLower)
 
 
 -- | PSQL connect info that is fetched from env
@@ -43,7 +43,7 @@ getRedisEnvConnectInfo = do
 -- | Given a queue prefix, add a random suffix to create a queue name
 randomQueueName :: B.Queue -> IO B.Queue
 randomQueueName prefix = do
-  postfix <- randomString (onlyAlphaNum randomASCII) 10
+  postfix <- randomString (onlyLower randomASCII) 10
   return $ prefix <> "_" <> postfix
 
 -- | Given a predicate IO action, test it for given number of

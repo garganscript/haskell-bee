@@ -77,3 +77,7 @@ instance (SerializableMessage a, Show a) => HasBroker PGMQBroker a where
     case mMetrics of
       Nothing -> return 0
       Just (PGMQ.Metrics { queueLength }) -> return queueLength
+
+  getArchivedMessage (PGMQBroker' { conn }) queue (PGMQMid msgId) = do
+    mMsg <- PGMQ.readMessageFromArchive conn queue msgId
+    pure $ PGMQBM <$> mMsg

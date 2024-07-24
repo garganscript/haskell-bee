@@ -81,7 +81,6 @@ handleMessage state@(State { .. }) brokerMessage = do
           ASArchive -> do
             -- putStrLn $ formatStr state $ "archiving completed job " <> show msgId <> " (strategy: " <> show archiveStrategy <> ")"
             archiveMessage broker queueName msgId
-
   
   case mTimeout of
     Just _ -> archiveHandler

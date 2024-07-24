@@ -17,9 +17,10 @@ import Async.Worker.Broker.Redis qualified as Redis
 import Async.Worker.Broker.Types qualified as BT
 import Control.Exception (bracket)
 import Data.Aeson (ToJSON(..), FromJSON(..), withText)
+import Data.Maybe (isJust)
 import Data.Text qualified as T
 import Test.Hspec
-import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName)
+import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil)
 
 
 data TestEnv b =
@@ -70,15 +71,25 @@ brokerTests :: (BT.HasBroker b Message)
 brokerTests bInitParams =
   parallel $ around (withBroker bInitParams) $ describe "Broker tests" $ do
     it "can send and receive a message" $ \(TestEnv { broker, queue }) -> do
-      BT.dropQueue broker queue
-      BT.createQueue broker queue
       let msg = Message { text = "test" }
       BT.sendMessage broker queue (BT.toMessage msg)
       msg2 <- BT.readMessageWaiting broker queue
-      putStrLn $ "[messageId] " <> show (BT.messageId msg2)
-      msg `shouldBe` (BT.toA $ BT.getMessage msg2)
+      -- putStrLn $ "[messageId] " <> show (BT.messageId msg2)
+      msg `shouldBe` BT.toA (BT.getMessage msg2)
 
-
+    it "can send, archive and read message from archive" $ \(TestEnv { broker, queue }) -> do
+      let msg = Message { text = "test" }
+      BT.sendMessage broker queue (BT.toMessage msg)
+      msg2 <- BT.readMessageWaiting broker queue
+      let msgId = BT.messageId msg2
+      BT.archiveMessage broker queue msgId
+      putStrLn $ "Reading msg " <> show msgId <> " from archive queue " <> queue
+      -- It might take some time to archive a message so we wait a bit
+      waitUntil (isJust <$> BT.getArchivedMessage broker queue msgId) 200
+      msgArchive <- BT.getArchivedMessage broker queue msgId
+      let msgIdArchive = BT.messageId <$> msgArchive
+      msgIdArchive `shouldBe` Just msgId
+      
 
 pgmqBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker Message)
 pgmqBrokerInitParams = do

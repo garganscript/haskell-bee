@@ -131,3 +131,6 @@ class (
 
   {-| Queue size -}
   getQueueSize :: Broker b a -> Queue -> IO Int
+
+  {-| Read archived message -}
+  getArchivedMessage :: Broker b a -> Queue -> MessageId b -> IO (Maybe (BrokerMessage b a))
