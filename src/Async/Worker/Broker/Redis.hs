@@ -12,10 +12,13 @@ https://redis.io/glossary/redis-queue/
 
 The design is as follows:
 - for each queue we have an 'id counter'
-- each queue is represented as a list of message ids
+- each queue is represented as a set of message ids
 - each message is stored under unique key, derived from its id
 - the above allows us to have an archive with messages
 - deleting a message means removing it's unique key from Redis
+
+The queue itself is a list, the archive is a set (so that we can use
+SISMEMBER).
 -}
 
 
@@ -31,7 +34,7 @@ module Async.Worker.Broker.Redis
 where
 
 import Async.Worker.Broker.Types (HasBroker(..), Queue, SerializableMessage)
-import Control.Concurrent (threadDelay)
+-- import Control.Concurrent (threadDelay)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object)
@@ -55,8 +58,6 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
     deriving (Eq, Show)
   data BrokerInitParams RedisBroker a = RedisBrokerInitParams Redis.ConnectInfo
 
-  -- We're using simple QUEUE so we don't care about message id as we
-  -- won't be deleting/archiving the messages
   messageId (RedisBM (RedisWithMsgId { rmidId })) = RedisMid rmidId
   getMessage (RedisBM (RedisWithMsgId { rmida })) = RedisM rmida
   toMessage message = RedisM message
@@ -76,23 +77,45 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
     let queueK = queueKey queue
     void $ Redis.runRedis conn $ Redis.del [queueK]
 
-  readMessageWaiting b@(RedisBroker' { conn }) queue = loop
+  -- TODO This is simplified
+  readMessageWaiting = popMessageWaiting
+
+  popMessageWaiting b@(RedisBroker' { conn }) queue = loop
     where
       queueK = queueKey queue
       loop = do
-        eMsgId <- Redis.runRedis conn $ Redis.spop queueK
-        case eMsgId of
+        -- 0 means block indefinitely
+        -- https://redis.io/docs/latest/commands/blpop/
+        eData <- Redis.runRedis conn $ Redis.blpop [queueK] 0
+        case eData of
           Left _ -> undefined
-          Right Nothing -> do
-            threadDelay 100
-            readMessageWaiting b queue
-          Right (Just msgIdBS) -> case bsToId msgIdBS of
+          Right Nothing -> undefined
+          Right (Just (_queueK, msgIdBS)) -> case bsToId msgIdBS of
             Nothing -> undefined
             Just msgId -> do
               mMsg <- getRedisMessage b queue msgId
-              case mMsg of
-                Nothing -> undefined
-                Just msg -> return msg
+              maybe undefined return mMsg
+
+  -- popMessageWaiting b@(RedisBroker' { conn }) queue = loop
+  --   where
+  --     queueK = queueKey queue
+  --     loop = do
+  --       eMsgId <- Redis.runRedis conn $ Redis.spop queueK
+  --       case eMsgId of
+  --         Left _ -> undefined
+  --         Right Nothing -> do
+  --           threadDelay (10*1000)
+  --           popMessageWaiting b queue
+  --         Right (Just msgIdBS) -> case bsToId msgIdBS of
+  --           Nothing -> undefined
+  --           Just msgId -> do
+  --             mMsg <- getRedisMessage b queue msgId
+  --             case mMsg of
+  --               Nothing -> undefined
+  --               Just msg -> return msg
+                
+  setMessageTimeout _broker _queue _msgId _timeoutS =
+    pure ()
 
   sendMessage b@(RedisBroker' { conn }) queue (RedisM message) = do
     mId <- nextId b queue
@@ -104,34 +127,44 @@ instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
         let msgK = messageKey queue msgId
         let queueK = queueKey queue
         void $ Redis.runRedis conn $ do
+          -- write the message itself under unique key
           _ <- Redis.set msgK (BSL.toStrict $ Aeson.encode m)
-          Redis.sadd queueK [idToBS msgId]
+          -- add message id to the list
+          -- Redis.sadd queueK [idToBS msgId]
+          Redis.lpush queueK [idToBS msgId]
+        return msgId
 
   -- deleteMessage (RedisBroker' { conn }) queue (RedisMid msgId) = do
   deleteMessage (RedisBroker' { conn }) queue msgId = do
     let queueK = queueKey queue
-    void $ Redis.runRedis conn $ Redis.srem queueK [idToBS msgId]
     let messageK = messageKey queue msgId
-    void $ Redis.runRedis conn $ Redis.del [messageK]
+    -- void $ Redis.runRedis conn $ Redis.srem queueK [idToBS msgId]
+    void $ Redis.runRedis conn $ do
+      _ <- Redis.lrem queueK 1 (idToBS msgId)
+      Redis.del [messageK]
 
   -- archiveMessage (RedisBroker' { conn }) queue (RedisMid msgId) = do
   archiveMessage (RedisBroker' { conn }) queue msgId = do
     let queueK = queueKey queue
     let archiveK = archiveKey queue
-    eMove <- Redis.runRedis conn $ Redis.smove queueK archiveK (idToBS msgId)
-    case eMove of
-      Left _ -> undefined
-      Right True -> return ()
-      Right False -> do
-        -- OK so the queue might not have the id, we just add it to archive to make sure
-        void $ Redis.runRedis conn $ Redis.sadd archiveK [idToBS msgId]
+    void $ Redis.runRedis conn $ do
+      _ <- Redis.lrem queueK 1 (idToBS msgId)
+      Redis.sadd archiveK [idToBS msgId]
+    -- eMove <- Redis.runRedis conn $ Redis.smove queueK archiveK (idToBS msgId)
+    -- case eMove of
+    --   Left _ -> undefined
+    --   Right True -> return ()
+    --   Right False -> do
+    --     -- OK so the queue might not have the id, we just add it to archive to make sure
+    --     void $ Redis.runRedis conn $ Redis.sadd archiveK [idToBS msgId]
 
   getQueueSize (RedisBroker' { conn }) queue = do
     let queueK = queueKey queue
-    eLen <- Redis.runRedis conn $ Redis.scard queueK
+    -- eLen <- Redis.runRedis conn $ Redis.scard queueK
+    eLen <- Redis.runRedis conn $ Redis.llen queueK
     case eLen of
       Right len -> return $ fromIntegral len
-      Left _ -> return 0
+      Left _ -> undefined
 
   getArchivedMessage b@(RedisBroker' { conn }) queue msgId = do
     let archiveK = archiveKey queue
@@ -169,7 +202,7 @@ nextId (RedisBroker' { conn }) queue = do
 
 -- | Key under which a message is stored
 messageKey :: Queue -> MessageId RedisBroker -> BS.ByteString
-messageKey queue (RedisMid msgId) = BS.pack $ beePrefix <> "queue-" <> queue <> "-message-" <> show msgId
+messageKey queue (RedisMid msgId) = queueKey queue <> BS.pack ("-message-" <> show msgId)
 
 getRedisMessage :: FromJSON a
                => Broker RedisBroker a

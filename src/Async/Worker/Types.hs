@@ -41,13 +41,12 @@ module Async.Worker.Types
   -- * Other useful types and functions
   , HasWorkerBroker
   , formatStr
-  , JobTimeout(..)
-  , JobException(..) )
+  , JobTimeout(..) )
 where
 
 import Async.Worker.Broker.Types (Broker, BrokerMessage, HasBroker, Queue)
 import Control.Applicative ((<|>))
-import Control.Exception.Safe (Exception, SomeException)
+import Control.Exception.Safe (Exception)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), withObject, withText)
 import Data.Text qualified as T
 import Data.Typeable (Typeable)
@@ -156,7 +155,12 @@ data JobMetadata =
               , timeout          :: Timeout
               -- | Read count so we know how many times this message
               -- was processed
-              , readCount        :: ReadCount }
+              , readCount        :: ReadCount
+              -- | A worker might have processed a task and be
+              -- killed. If 'resendWhenWorkerKilled' is 'True', this
+              -- job will be resent to broker and picked up
+              -- later. Otherwise it will be discarded.
+              , resendWhenWorkerKilled :: Bool }
   deriving (Eq, Show)
 instance ToJSON JobMetadata where
   toJSON (JobMetadata { .. }) =
@@ -166,6 +170,7 @@ instance ToJSON JobMetadata where
         , "tstrat" .= timeoutStrategy
         , "timeout" .= timeout
         , "readCount" .= readCount
+        , "resendWhenWorkerKilled" .= resendWhenWorkerKilled
         ]
 instance FromJSON JobMetadata where
   parseJSON = withObject "JobMetadata" $ \o -> do
@@ -174,6 +179,7 @@ instance FromJSON JobMetadata where
     timeoutStrategy <- o .: "tstrat"
     timeout <- o .: "timeout"
     readCount <- o .: "readCount"
+    resendWhenWorkerKilled <- o .: "resendWhenWorkerKilled"
     return $ JobMetadata { .. }
 
 -- | For a typical 'Job' it's probably sane to just archive it no
@@ -184,7 +190,8 @@ defaultMetadata =
               , errorStrategy = ESArchive
               , timeoutStrategy = TSArchive
               , timeout = 10
-              , readCount = 0 }
+              , readCount = 0
+              , resendWhenWorkerKilled = True }
     
 -- | Worker 'Job' is 'a' (defining action to call via 'performAction')
 -- together with associated 'JobMetadata'.
@@ -277,10 +284,3 @@ data JobTimeout b a =
              , jtTimeout   :: Timeout }
 deriving instance (HasWorkerBroker b a) => Show (JobTimeout b a)
 instance (HasWorkerBroker b a) => Exception (JobTimeout b a)
-
--- | An exception, thrown when job ends with error
-data JobException b a =
-  JobException { jeBMessage :: BrokerMessage b (Job a)
-               , jeException :: SomeException }
-deriving instance (HasWorkerBroker b a) => Show (JobException b a)
-instance (HasWorkerBroker b a) => Exception (JobException b a)

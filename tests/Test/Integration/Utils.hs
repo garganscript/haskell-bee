@@ -1,10 +1,13 @@
 module Test.Integration.Utils
-  ( getPSQLEnvConnectInfo
+  ( defaultPGMQVt
+  , getPSQLEnvConnectInfo
   , getRedisEnvConnectInfo
   , randomQueueName
   , waitUntil
   , waitUntilTVarEq
-  , waitUntilTVarPred )
+  , waitUntilTVarPred
+  , waitUntilQueueSizeIs
+  , waitUntilQueueEmpty )
 where
 
 import Async.Worker.Broker qualified as B
@@ -18,6 +21,26 @@ import System.Environment (lookupEnv)
 import System.Timeout qualified as Timeout
 import Test.Hspec (expectationFailure, shouldBe, shouldSatisfy, Expectation, HasCallStack)
 import Test.RandomStrings (randomASCII, randomString, onlyLower)
+
+
+
+-- | Timeout for 'wait' jobs, in ms.
+newtype TimeoutMs = TimeoutMs Int
+  deriving (Eq, Show, Num, Integral, Real, Enum, Ord)
+
+
+-- | Visibility timeout is a very important parameter for PGMQ. It is
+-- mainly used when reading a job: it specifies for how many seconds
+-- this job should be invisible for other workers. We need more tests
+-- and setting this correctly, preferably in accordance with
+-- 'Job.timeout'. Issue is that at the broker level we don't know
+-- anything about 'Job'...
+--
+-- The lower the value, the more probable that some other worker will
+-- pick up the same job at about the same time (before broker marks it
+-- as invisible).
+defaultPGMQVt :: Int
+defaultPGMQVt = 1
 
 
 -- | PSQL connect info that is fetched from env
@@ -46,10 +69,14 @@ randomQueueName prefix = do
   postfix <- randomString (onlyLower randomASCII) 10
   return $ prefix <> "_" <> postfix
 
+
+waitThreadDelay :: Int
+waitThreadDelay = 50 * 1000
+
 -- | Given a predicate IO action, test it for given number of
 -- milliseconds or fail
-waitUntil :: HasCallStack => IO Bool -> Int -> Expectation
-waitUntil pred' timeoutMs = do
+waitUntil :: HasCallStack => IO Bool -> TimeoutMs -> Expectation
+waitUntil pred' (TimeoutMs timeoutMs) = do
   _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
   -- shortcut for testing mTimeout
   p <- pred'
@@ -61,12 +88,12 @@ waitUntil pred' timeoutMs = do
       if p
         then return ()
         else do
-          threadDelay 50
+          threadDelay waitThreadDelay
           performTest
 
 -- | Similar to 'waitUntil' but specialized to 'TVar' equality checking
-waitUntilTVarEq :: (HasCallStack, Show a, Eq a) => TVar a -> a -> Int -> Expectation
-waitUntilTVarEq tvar expected timeoutMs = do
+waitUntilTVarEq :: (HasCallStack, Show a, Eq a) => TVar a -> a -> TimeoutMs -> Expectation
+waitUntilTVarEq tvar expected (TimeoutMs timeoutMs) = do
   _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
   -- shortcut for testing mTimeout
   val <- readTVarIO tvar
@@ -78,12 +105,12 @@ waitUntilTVarEq tvar expected timeoutMs = do
       if val == expected
         then return ()
         else do
-          threadDelay 50
+          threadDelay waitThreadDelay
           performTest
 
 -- | Similar to 'waitUntilTVarEq' but with predicate checking
-waitUntilTVarPred :: (HasCallStack, Show a, Eq a) => TVar a -> (a -> Bool) -> Int -> Expectation
-waitUntilTVarPred tvar predicate timeoutMs = do
+waitUntilTVarPred :: (HasCallStack, Show a, Eq a) => TVar a -> (a -> Bool) -> TimeoutMs -> Expectation
+waitUntilTVarPred tvar predicate (TimeoutMs timeoutMs) = do
   _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
   -- shortcut for testing mTimeout
   val <- readTVarIO tvar
@@ -95,5 +122,24 @@ waitUntilTVarPred tvar predicate timeoutMs = do
       if predicate val
         then return ()
         else do
-          threadDelay 50
+          threadDelay waitThreadDelay
           performTest
+
+waitUntilQueueSizeIs :: (B.HasBroker b a) => B.Broker b a -> B.Queue -> Int -> TimeoutMs -> Expectation
+waitUntilQueueSizeIs b queue size (TimeoutMs timeoutMs) = do
+  _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
+
+  qSize <- B.getQueueSize b queue
+  qSize `shouldBe` size
+
+  where
+    performTest = do
+      qSize <- B.getQueueSize b queue
+      if qSize == size
+        then return ()
+        else do
+          threadDelay waitThreadDelay
+          performTest
+
+waitUntilQueueEmpty :: (B.HasBroker b a) => B.Broker b a -> B.Queue -> TimeoutMs -> Expectation
+waitUntilQueueEmpty b queue timeoutMs = waitUntilQueueSizeIs b queue 0 timeoutMs

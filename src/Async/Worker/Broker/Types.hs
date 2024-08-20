@@ -19,6 +19,7 @@ Broker typeclass definition.
     
 module Async.Worker.Broker.Types
   ( Queue
+  , TimeoutS
   -- * Main broker typeclass
   -- $broker
   , HasBroker(..)
@@ -32,6 +33,7 @@ import Data.Typeable (Typeable)
 
 
 type Queue = String
+type TimeoutS = Int  -- timeout for a message, in seconds
 
 
 {- $broker
@@ -117,11 +119,23 @@ class (
   {-| Drop queue -}
   dropQueue :: Broker b a -> Queue -> IO ()
 
-  {-| Read message, waiting for it if not present -}
+  {-| Read message from queue, waiting for it if not present (this leaves
+  the message in queue, you need to use 'setMessageTimeout' to prevent
+  other workers from seeing this message). -}
   readMessageWaiting :: Broker b a -> Queue -> IO (BrokerMessage b a)
 
+  {-| Pop message from queue, waiting for it if not present -}
+  popMessageWaiting :: Broker b a -> Queue -> IO (BrokerMessage b a)
+
+  {-| We sometimes need a way to tell the broker that a message shouldn't
+  be visible for given amount of time (e.g. 'visibility timeout'
+  setting in PGMQ). The broker operates only on 'a' level and isn't
+  aware of 'Job' with its 'JobMetadata'. Hence, it's the worker's
+  responsibility to properly set timeout after message is read. -}
+  setMessageTimeout :: Broker b a -> Queue -> MessageId b -> TimeoutS -> IO ()
+
   {-| Send message -}
-  sendMessage :: Broker b a -> Queue -> Message b a -> IO ()
+  sendMessage :: Broker b a -> Queue -> Message b a -> IO (MessageId b)
 
   {-| Delete message -}
   deleteMessage :: Broker b a -> Queue -> MessageId b -> IO ()

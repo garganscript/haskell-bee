@@ -20,7 +20,8 @@ import Data.Aeson (ToJSON(..), FromJSON(..), withText)
 import Data.Maybe (isJust)
 import Data.Text qualified as T
 import Test.Hspec
-import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil)
+import Test.Integration.Utils (defaultPGMQVt, getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil)
+import Test.RandomStrings (randomASCII, randomString, onlyAlphaNum)
 
 
 data TestEnv b =
@@ -72,28 +73,56 @@ brokerTests bInitParams =
   parallel $ around (withBroker bInitParams) $ describe "Broker tests" $ do
     it "can send and receive a message" $ \(TestEnv { broker, queue }) -> do
       let msg = Message { text = "test" }
-      BT.sendMessage broker queue (BT.toMessage msg)
+      msgId <- BT.sendMessage broker queue (BT.toMessage msg)
       msg2 <- BT.readMessageWaiting broker queue
       -- putStrLn $ "[messageId] " <> show (BT.messageId msg2)
       msg `shouldBe` BT.toA (BT.getMessage msg2)
+      msgId `shouldBe` BT.messageId msg2
 
     it "can send, archive and read message from archive" $ \(TestEnv { broker, queue }) -> do
       let msg = Message { text = "test" }
-      BT.sendMessage broker queue (BT.toMessage msg)
+      msgId <- BT.sendMessage broker queue (BT.toMessage msg)
       msg2 <- BT.readMessageWaiting broker queue
-      let msgId = BT.messageId msg2
+      msgId `shouldBe` BT.messageId msg2
       BT.archiveMessage broker queue msgId
-      putStrLn $ "Reading msg " <> show msgId <> " from archive queue " <> queue
       -- It might take some time to archive a message so we wait a bit
       waitUntil (isJust <$> BT.getArchivedMessage broker queue msgId) 200
       msgArchive <- BT.getArchivedMessage broker queue msgId
       let msgIdArchive = BT.messageId <$> msgArchive
       msgIdArchive `shouldBe` Just msgId
-      
+
+    it "returns correct message id when sending message to broker" $ \(TestEnv { broker, queue }) -> do
+      let iter = [1..20] :: [Int]  -- number of steps
+      mapM_ (\_i -> do
+                -- Generate random strings and make sure that the
+                -- message ids we get from sendMessage match our data
+                text <- randomString (onlyAlphaNum randomASCII) 20
+                let msg = Message { text }
+                msgId <- BT.sendMessage broker queue (BT.toMessage msg)
+                bMsg <- BT.readMessageWaiting broker queue
+                msg `shouldBe` BT.toA (BT.getMessage bMsg)
+                msgId `shouldBe` BT.messageId bMsg
+                BT.deleteMessage broker queue msgId
+                ) iter
+
+    it "preserves msgId when archiving a message" $ \(TestEnv { broker, queue }) -> do
+      let iter = [1..20] :: [Int]  -- number of steps
+      mapM_ (\_i -> do
+                -- Generate random strings and make sure that the
+                -- message ids we get from sendMessage match our data
+                text <- randomString (onlyAlphaNum randomASCII) 20
+                let msg = Message { text }
+                msgId <- BT.sendMessage broker queue (BT.toMessage msg)
+                BT.archiveMessage broker queue msgId
+                msgArchive <- BT.getArchivedMessage broker queue msgId
+                Just msg `shouldBe` (BT.toA . BT.getMessage <$> msgArchive)
+                ) iter
+
 
 pgmqBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker Message)
 pgmqBrokerInitParams = do
-  PGMQ.PGMQBrokerInitParams <$> getPSQLEnvConnectInfo
+  conn <- getPSQLEnvConnectInfo
+  return $ PGMQ.PGMQBrokerInitParams conn defaultPGMQVt
 
 redisBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker Message)
 redisBrokerInitParams = do

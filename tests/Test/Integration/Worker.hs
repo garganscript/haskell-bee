@@ -12,29 +12,37 @@
 
 module Test.Integration.Worker
  ( workerTests
+ , multiWorkerTests
  , pgmqWorkerBrokerInitParams
  , redisWorkerBrokerInitParams )
 where
 
-import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat)
+import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat, resendOnKill, KillWorkerSafely(..))
 import Async.Worker.Broker.PGMQ qualified as PGMQ
 import Async.Worker.Broker.Redis qualified as Redis
 import Async.Worker.Broker.Types qualified as BT
 import Async.Worker.Types
-import Control.Concurrent (forkIO, killThread, threadDelay, ThreadId)
+import Control.Concurrent (forkIO, killThread, threadDelay, ThreadId, throwTo)
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, TVar, modifyTVar)
 import Control.Exception (bracket, Exception, throwIO)
+import Control.Monad (void)
 import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
+import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 import Test.Hspec
-import Test.Integration.Utils (getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntilTVarEq, waitUntilTVarPred)
+import Test.Integration.Utils (defaultPGMQVt, getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil, waitUntilTVarEq, waitUntilTVarPred, waitUntil, waitUntilQueueEmpty)
 
 
 data TestEnv b =
   TestEnv { state  :: State b Message
           , events :: TVar [Event]
-          , threadId :: ThreadId }
+          , threadId :: ThreadId
+          , brokerInitParams :: BT.BrokerInitParams b (Job Message)
+          -- | a separate broker so that we use separate connection from the worker
+          , broker :: BT.Broker b (Job Message)
+          , queueName :: BT.Queue
+          }
 
 
 testQueuePrefix :: BT.Queue
@@ -85,9 +93,40 @@ pa :: (HasWorkerBroker b Message) => State b a -> BT.BrokerMessage b (Job Messag
 pa _state bm = do
   let job' = BT.toA $ BT.getMessage bm
   case job job' of
-    Message { text } -> putStrLn text
+    Message { text = _text } -> return ()  -- putStrLn text
     Error -> throwIO $ SimpleException "Error!"
     Timeout { delay } -> threadDelay (delay * second)
+
+pushEvent :: BT.HasBroker b (Job Message)
+          => TVar [Event]
+          -> (Message -> Event)
+          -> BT.BrokerMessage b (Job Message)
+          -> IO ()
+pushEvent events evt bm = atomically $ modifyTVar events (\e -> e ++ [evt $ job $ BT.toA $ BT.getMessage bm])
+
+
+initState :: (HasWorkerBroker b Message)
+          => BT.BrokerInitParams b (Job Message)
+          -> TVar [Event]
+          -> BT.Queue
+          -> String
+          -> IO (State b Message, ThreadId)
+initState bInitParams events queue workerName = do
+  let pushEvt evt _s = pushEvent events evt
+
+  b' <- BT.initBroker bInitParams
+  let state = State { broker = b'
+                    , queueName = queue
+                    , name = workerName <> " for " <> queue
+                    , performAction = pa
+                    , onMessageReceived = Just (pushEvt EMessageReceived)
+                    , onJobFinish = Just (pushEvt EJobFinished)
+                    , onJobTimeout = Just (pushEvt EJobTimeout)
+                    , onJobError = Just (pushEvt EJobError) }
+
+  threadId <- forkIO $ run state
+
+  pure (state, threadId)
 
 
 withWorker :: (HasWorkerBroker b Message)
@@ -110,201 +149,199 @@ withWorker brokerInitParams = bracket (setUpWorker brokerInitParams) tearDownWor
       BT.createQueue b queue
 
       events <- newTVarIO []
-      let pushEvent evt bm = atomically $ modifyTVar events (\e -> e ++ [evt $ job $ BT.toA $ BT.getMessage bm])
 
-      let state = State { broker = b
-                        , queueName = queue
-                        , name = "test worker for " <> queue
-                        , performAction = pa
-                        , onMessageReceived = Just (\_s bm -> pushEvent EMessageReceived bm)
-                        , onJobFinish = Just (\_s bm -> pushEvent EJobFinished bm)
-                        , onJobTimeout = Just (\_s bm -> pushEvent EJobTimeout bm)
-                        , onJobError = Just (\_s bm -> pushEvent EJobError bm) }
-
-      threadId <- forkIO $ run state
+      (state, threadId) <- initState bInitParams events queue "test worker"
       
-      return $ TestEnv { state, events, threadId }
+      return $ TestEnv { state
+                       , events
+                       , threadId
+                       , brokerInitParams = bInitParams
+                       , broker = b
+                       , queueName = queue }
 
     tearDownWorker :: (HasWorkerBroker b Message)
                    => TestEnv b
                    -> IO ()
-    tearDownWorker (TestEnv { state = State { broker = b, queueName }, threadId }) = do
-      BT.dropQueue b queueName
+    tearDownWorker (TestEnv { broker = b, queueName, state = State { broker = b' }, threadId }) = do
       killThread threadId
+      BT.deinitBroker b'
+      BT.dropQueue b queueName
       BT.deinitBroker b
 
 
+-- | Single 'Worker' tests, abstracting the 'Broker' away.
 workerTests :: (HasWorkerBroker b Message)
             => BT.BrokerInitParams b (Job Message)
             -> Spec
 workerTests brokerInitParams =
   parallel $ around (withWorker brokerInitParams) $ describe "Worker tests" $ do
-    it "can process a simple job" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "can process a simple job" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
  
       let text = "simple test"
       let msg = Message { text }
       let job = mkDefaultSendJob' broker queueName msg
-      sendJob' job
+      void $ sendJob' job
  
       waitUntilTVarEq events [ EMessageReceived msg, EJobFinished msg ] 500
 
-        -- queue should be empty
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
-
-    it "can handle a job with error" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
-      -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
+
+    it "can handle a job with error" $ \(TestEnv { broker, queueName, events }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Error
       let job = mkDefaultSendJob' broker queueName msg
-      sendJob' job
+      void $ sendJob' job
  
       waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
 
       -- queue should be empty (error jobs archived by default)
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
 
-    it "can handle a job with error (with archive)" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "can handle a job with error (with archive)" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Error
       let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESDelete }
-      sendJob' job
+      void $ sendJob' job
  
       waitUntilTVarEq events [ EMessageReceived msg, EJobError msg ] 500
 
       -- queue should be empty (error job deleted)
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
 
-    it "can handle a job with error (with repeat n)" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "can handle a job with error (with repeat n)" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Error
       let job = (mkDefaultSendJob' broker queueName msg) { errStrat = ESRepeatNElseArchive 1 }
-      sendJob' job
+      void $ sendJob' job
  
       waitUntilTVarEq events [ EMessageReceived msg, EJobError msg
                              , EMessageReceived msg, EJobError msg ] 500
 
-      -- NOTE It doesn't make sense to check queue size here, the
-      -- worker just continues to run the errored task in background
-      -- and currently there is no way to stop it. Maybe implementing
-      -- a custom test queue could help us here.
+      -- queue should be empty (error job archived)
+      waitUntilQueueEmpty broker queueName 100
 
-    it "can handle a job with timeout" $ \(TestEnv { state = State { broker, queueName }, events}) -> do
+    it "can handle a job with timeout (archive strategy)" $ \(TestEnv { broker, queueName, events}) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Timeout { delay = 2 }
-      let job = mkDefaultSendJob broker queueName msg 1
-      sendJob' job
+      let job' = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSArchive }
+      msgId <- sendJob' job'
  
-      waitUntilTVarPred events (\e -> take 2 e == [ EMessageReceived msg, EJobTimeout msg ]) 2500
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 1200
 
-      -- NOTE It doesn't make sense to check queue size here, the
-      -- worker just continues to run the errored task in background
-      -- and currently there is no way to stop it. Maybe implementing
-      -- a custom test queue could help us here.
+      -- There might be a slight delay before the message is archived
+      -- (handling exception step in the thread)
+      waitUntil (isJust <$> BT.getArchivedMessage broker queueName msgId) 100
 
-    it "can handle a job with timeout (archive strategy)" $ \(TestEnv { state = State { broker, queueName }, events}) -> do
-      -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
-      -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
-
-      let msg = Timeout { delay = 2 }
-      let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSArchive }
-      sendJob' job
- 
-      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 2500
+      -- The archive should contain our message
+      mMsgArchive <- BT.getArchivedMessage broker queueName msgId
+      mMsgArchive `shouldSatisfy` isJust
+      let msgArchive = fromJust mMsgArchive
+      job (BT.toA $ BT.getMessage msgArchive) `shouldBe` msg
 
       -- Queue should be empty, since we archive timed out jobs
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
 
-    it "can handle a job with timeout (delete strategy)" $ \(TestEnv { state = State { broker, queueName }, events}) -> do
+    it "can handle a job with timeout (delete strategy)" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Timeout { delay = 2 }
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSDelete }
-      sendJob' job
+      void $ sendJob' job
+ 
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 1200
+
+      -- Queue should be empty, since we archive timed out jobs
+      waitUntilQueueEmpty broker queueName 100
+
+    it "can handle a job with timeout (repeat strategy)" $ \(TestEnv { broker, queueName, events }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= shouldBe 0
+
+      let msg = Timeout { delay = 2 }
+      let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSRepeat }
+      void $ sendJob' job
  
       waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 2500
 
-      -- Queue should be empty, since we archive timed out jobs
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      -- NOTE It doesn't make sense to check queue size here, the
+      -- worker just continues to run the errored task in background
+      -- and currently there is no way to stop it. Maybe implementing
+      -- a custom test queue could help us here.
 
-    it "can handle a job with timeout (repeat N times, then archive strategy)" $ \(TestEnv { state = State { broker, queueName }, events}) -> do
+    it "can handle a job with timeout (repeat N times, then archive strategy)" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msg = Timeout { delay = 2 }
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSRepeatNElseArchive 1 }
-      sendJob' job
+      void $ sendJob' job
  
       -- | Should have been run 2 times, then archived
       waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg
-                             , EMessageReceived msg, EJobTimeout msg ] 3500
+                             , EMessageReceived msg, EJobTimeout msg ] 2500
 
       -- Queue should be empty, since we archive timed out jobs
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
 
-    it "can process two jobs" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "can handle a job with timeout (repeat N times, then delete strategy)" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
+
+      let msg = Timeout { delay = 2 }
+      let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSRepeatNElseDelete 1 }
+      void $ sendJob' job
+ 
+      -- | Should have been run 2 times, then archived
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg
+                             , EMessageReceived msg, EJobTimeout msg ] 2500
+
+      -- Queue should be empty, since we deleted timed out jobs
+      waitUntilQueueEmpty broker queueName 100
+
+    it "can process two jobs" $ \(TestEnv { broker, queueName, events }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= shouldBe 0
  
       let text1 = "simple test 1"
       let msg1 = Message { text = text1 }
       let job1 = mkDefaultSendJob' broker queueName msg1
-      sendJob' job1
+      void $ sendJob' job1
       let text2 = "simple test 2"
       let msg2 = Message { text = text2 }
       let job2 = mkDefaultSendJob' broker queueName msg2
-      sendJob' job2
+      void $ sendJob' job2
  
       -- The jobs don't have to be process exactly in this order so we just use Set here
       waitUntilTVarPred events (
@@ -313,24 +350,21 @@ workerTests brokerInitParams =
           , EMessageReceived msg2, EJobFinished msg2 ]) 500
 
       -- queue should be empty
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
 
-    it "after job with error, continue with another one" $ \(TestEnv { state = State { broker, queueName }, events }) -> do
+    it "after job with error, continue with another one" $ \(TestEnv { broker, queueName, events }) -> do
       -- no events initially
-      events1 <- readTVarIO events
-      events1 `shouldBe` []
+      readTVarIO events >>= shouldBe []
       -- queue should be empty
-      queueLen1 <- BT.getQueueSize broker queueName
-      queueLen1 `shouldBe` 0
+      BT.getQueueSize broker queueName >>= shouldBe 0
 
       let msgErr = Error
       let jobErr = mkDefaultSendJob' broker queueName msgErr
-      sendJob' jobErr
+      void $ sendJob' jobErr
       let text = "simple test"
       let msg = Message { text }
       let job = mkDefaultSendJob' broker queueName msg
-      sendJob' job
+      void $ sendJob' job
  
       waitUntilTVarPred events (
         \e -> Set.fromList e ==
@@ -338,8 +372,161 @@ workerTests brokerInitParams =
                        , EMessageReceived msg, EJobFinished msg ]) 500
 
       -- queue should be empty
-      queueLen2 <- BT.getQueueSize broker queueName
-      queueLen2 `shouldBe` 0
+      waitUntilQueueEmpty broker queueName 100
+
+    it "killing worker should leave a currently processed message on queue (when resendWhenWorkerKilled is True)" $ \(TestEnv { broker, queueName, events, threadId }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= shouldBe 0
+
+      -- Perform some long job
+      let msg = Timeout { delay = 2 }
+      let job = (mkDefaultSendJob broker queueName msg 2) { resendOnKill = True }
+      void $ sendJob' job
+
+      -- Let's wait a bit to make sure the message is picked up by the
+      -- worker
+      waitUntilTVarEq events [ EMessageReceived msg ] 300
+
+      -- Now let's kill the thread immediately
+      throwTo threadId KillWorkerSafely
+      putStrLn $ "After KillWorkerSafely: " <> queueName
+
+      -- The message should still be there
+      threadDelay (300 * 1000)
+      BT.getQueueSize broker queueName >>= \qs -> do
+        putStrLn $ "After threadDelay: " <> queueName <> " size: " <> show qs
+        qs  `shouldBe` 1
+
+    it "killing worker should discard the currently processed message (when resendWhenWorkerKilled is False)" $ \(TestEnv { broker, queueName, events, threadId }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= flip shouldBe 0
+
+      -- Perform some long job
+      let msg = Timeout { delay = 2 }
+      let job = (mkDefaultSendJob broker queueName msg 2) { resendOnKill = False }
+      void $ sendJob' job
+
+      -- Let's wait a bit to make sure the message is picked up by the
+      -- worker
+      waitUntilTVarEq events [ EMessageReceived msg ] 300
+      waitUntilQueueEmpty broker queueName 300
+
+      -- Now let's kill the thread immediately
+      throwTo threadId KillWorkerSafely
+
+      -- The message shouldn't be there
+      threadDelay (300 * 1000)
+      BT.getQueueSize broker queueName >>= shouldBe 0
+
+
+data TestEnvMulti b =
+  TestEnvMulti { broker :: BT.Broker b (Job Message)  -- a broker with which you can query its state
+               , statesWithThreadIds  :: [(State b Message, ThreadId)]
+               , events :: TVar [Event]
+               , brokerInitParams :: BT.BrokerInitParams b (Job Message)
+               , queueName :: BT.Queue
+               , numWorkers :: Int }
+
+
+testMultiQueuePrefix :: BT.Queue
+testMultiQueuePrefix = "test_workers"
+
+
+withWorkers :: (HasWorkerBroker b Message)
+            => BT.BrokerInitParams b (Job Message)
+            -> Int
+            -> (TestEnvMulti b -> IO ())
+            -> IO ()
+withWorkers brokerInitParams numWorkers = bracket (setUpWorkers brokerInitParams) tearDownWorkers
+  where
+    -- NOTE I need to pass 'b' again, otherwise GHC can't infer the
+    -- type of 'b' (even with 'ScopedTypeVariables' turned on)
+    setUpWorkers :: (HasWorkerBroker b Message)
+                 => BT.BrokerInitParams b (Job Message)
+                 -> IO (TestEnvMulti b)
+    setUpWorkers bInitParams = do
+      b <- BT.initBroker bInitParams
+
+      queue <- randomQueueName testMultiQueuePrefix
+      
+      BT.dropQueue b queue
+      BT.createQueue b queue
+
+      events <- newTVarIO []
+
+      statesWithThreadIds <-
+        mapM (\idx -> initState bInitParams events queue ("test worker " <> show idx)) [1..numWorkers]
+      
+      return $ TestEnvMulti { broker = b
+                            , queueName = queue
+                            , statesWithThreadIds
+                            , events
+                            , brokerInitParams = bInitParams
+                            , numWorkers }
+
+    tearDownWorkers :: (HasWorkerBroker b Message)
+                    => TestEnvMulti b
+                    -> IO ()
+    tearDownWorkers (TestEnvMulti { broker = b, queueName, statesWithThreadIds }) = do
+      mapM_ (\(State { broker = b' }, threadId) -> do
+        killThread threadId
+        BT.deinitBroker b'
+            ) statesWithThreadIds
+      BT.dropQueue b queueName
+      BT.deinitBroker b
+
+
+    
+-- | Multiple 'Worker' tests, abstracting the 'Broker' away. All these
+-- workers operate on the same queue.
+multiWorkerTests :: (HasWorkerBroker b Message)
+                 => BT.BrokerInitParams b (Job Message)
+                 -> Int
+                 -> Spec
+multiWorkerTests brokerInitParams numWorkers =
+  parallel $ around (withWorkers brokerInitParams numWorkers) $ describe "Worker tests" $ do
+    it "can process simple jobs" $ \(TestEnvMulti { broker, queueName, events, numWorkers = nw }) -> do
+      -- no events initially
+      readTVarIO events >>= shouldBe []
+      -- queue should be empty
+      BT.getQueueSize broker queueName >>= shouldBe 0
+
+      -- create some messages and make sure they are processed (bombarding with messages)
+      let msgs = [Message { text = "task " <> show idx } | idx <- [1..20*nw]]
+ 
+      let jobs = map (mkDefaultSendJob' broker queueName) msgs
+      mapM_ sendJob' jobs
+ 
+      -- The jobs don't have to be process exactly in this order so we just use Set here
+      let expected = concat [[EMessageReceived msg, EJobFinished msg] | msg <- msgs]
+      waitUntilTVarPred events (\e -> Set.fromList e == Set.fromList expected) (fromIntegral $ 200*nw)
+
+      -- queue should be empty
+      waitUntilQueueEmpty broker queueName 100
+
+    it "multiple workers and one long message should result in one message processed" $ \(TestEnvMulti { broker, queueName, events }) -> do
+      let msg = Timeout { delay = 2 }
+      let job' = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSArchive }
+      msgId <- sendJob' job'
+ 
+      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 1200
+      
+      -- There might be a slight delay before the message is archived
+      -- (handling exception step in the thread)
+      waitUntil (isJust <$> BT.getArchivedMessage broker queueName msgId) 100
+      
+      -- The archive should contain our message
+      mMsgArchive <- BT.getArchivedMessage broker queueName msgId
+      mMsgArchive `shouldSatisfy` isJust
+      let msgArchive = fromJust mMsgArchive
+      job (BT.toA $ BT.getMessage msgArchive) `shouldBe` msg
+      
+      -- Queue should be empty, since we archive timed out jobs
+      waitUntilQueueEmpty broker queueName 100
  
 
 second :: Int
@@ -351,7 +538,8 @@ millisecond = 1000
 
 pgmqWorkerBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker (Job Message))
 pgmqWorkerBrokerInitParams = do
-  PGMQ.PGMQBrokerInitParams <$> getPSQLEnvConnectInfo
+  conn <- getPSQLEnvConnectInfo
+  return $ PGMQ.PGMQBrokerInitParams conn defaultPGMQVt
 
 redisWorkerBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker (Job Message))
 redisWorkerBrokerInitParams = do

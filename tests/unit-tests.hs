@@ -45,6 +45,7 @@ instance QC.Arbitrary WT.JobMetadata where
     timeoutStrategy <- arbitrary
     timeout <- arbitrary
     readCount <- arbitrary
+    resendWhenWorkerKilled <- arbitrary
     return $ WT.JobMetadata { .. }
    
 aesonPropJobMetadataTests = testGroup "Aeson WT.JobMetadata (de-)serialization tests" $

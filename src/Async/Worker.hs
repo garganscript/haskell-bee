@@ -17,8 +17,9 @@ Asynchronous worker.
 
 
 module Async.Worker
-  ( -- * Running
-    run
+  ( KillWorkerSafely(..)
+  -- * Running
+  , run
     -- * Sending jobs
   , sendJob
   -- ** 'SendJob' wrappers
@@ -36,11 +37,28 @@ import Async.Worker.Broker
 {- | Various worker types, in particular 'State'
 -}
 import Async.Worker.Types
-import Control.Exception.Safe (catch, fromException, throwIO, SomeException)
-import Control.Monad (forever)
+import Control.Concurrent.STM (atomically)
+import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, writeTVar)
+import Control.Exception.Safe (catch, fromException, throwIO, SomeException, Exception)
+import Control.Monad (forever, void, when)
+import Debug.Trace (traceStack)
 import System.Timeout qualified as Timeout
 
 
+-- | If you want to stop a worker safely, use `throwTo'
+-- 'workerThreadId' 'KillWorkerSafely'. This way the worker will stop
+-- whatever is doing now and resend the message back to the
+-- broker. This way you won't lose your jobs. If you don't care about
+-- resuming a job, just set 'resendWhenWorkerKilled' property to
+-- 'False'.
+data KillWorkerSafely = KillWorkerSafely
+  deriving (Show)
+instance Exception KillWorkerSafely
+
+
+-- | This is the main function to start a worker. It's an infinite
+-- loop of reading the next broker message, processing it and handling
+-- any errors, issues that might arrise in the meantime.
 run :: (HasWorkerBroker b a) => State b a -> IO ()
 run state@(State { .. }) = do
   createQueue broker queueName
@@ -48,30 +66,61 @@ run state@(State { .. }) = do
   where
     loop :: IO ()
     loop = do
-      -- TODO try...catch for main loop. This should catch exceptions
-      -- but also job timeout events (we want to stick to the practice
-      -- of keeping only one try...catch in the whole function)
+      -- TVar to hold currently processed job. This is used for
+      -- exception handling.
+      mBrokerMessageTVar <- newTVarIO Nothing -- :: IO (TVar (Maybe (BrokerMessage b (Job a))))
+      
       catch (do
                 brokerMessage <- readMessageWaiting broker queueName
+                atomically $ writeTVar mBrokerMessageTVar (Just brokerMessage)
                 handleMessage state brokerMessage
                 callWorkerJobEvent onJobFinish state brokerMessage
-            ) (\err ->
+                atomically $ writeTVar mBrokerMessageTVar Nothing
+            ) (\err -> do
+        mBrokerMessage <- readTVarIO mBrokerMessageTVar
         case fromException err of
-          Just jt@(JobTimeout {}) -> handleTimeoutError state jt
+          Just KillWorkerSafely -> do
+            case mBrokerMessage of
+              Just brokerMessage -> do
+                let job = toA $ getMessage brokerMessage
+                let mdata = metadata job
+                -- Should we resend this message?
+                when (resendWhenWorkerKilled mdata) $ do
+                  putStrLn $ formatStr state $ "resending job: " <> show job
+                  void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
+                  size <- getQueueSize broker queueName
+                  putStrLn $ formatStr state $ "queue size: " <> show size
+                  
+                -- In any case, deinit the broker (i.e. close connection)
+                -- deinitBroker broker
+                
+                -- kill worker
+                throwIO KillWorkerSafely
+              Nothing -> pure ()
           Nothing -> case fromException err of
-            Just je@(JobException {}) -> handleJobError state je
-            _ -> handleUnknownError state err)
-
+            Just jt@(JobTimeout {}) -> handleTimeoutError state jt
+            Nothing -> case mBrokerMessage of
+              Just brokerMessage -> do
+                callWorkerJobEvent onJobError state brokerMessage
+                handleJobError state brokerMessage
+              _ -> handleUnknownError state err)
+ 
 handleMessage :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
 handleMessage state@(State { .. }) brokerMessage = do
   callWorkerJobEvent onMessageReceived state brokerMessage
   let msgId = messageId brokerMessage
   let msg = getMessage brokerMessage
   let job' = toA msg
-  putStrLn $ formatStr state $ "received job: " <> show (job job')
+  -- putStrLn $ formatStr state $ "received job: " <> show (job job')
   let mdata = metadata job'
   let t = jobTimeout job'
-  mTimeout <- Timeout.timeout (t * microsecond) (wrapPerformActionInJobException state brokerMessage)
+  let timeoutS = t * microsecond
+  -- Inform the broker how long a task could take. This way we prevent
+  -- the broker from sending this task to another worker (e.g. 'vt' in
+  -- PGMQ).
+  setMessageTimeout broker queueName msgId timeoutS
+  -- mTimeout <- Timeout.timeout timeoutS (wrapPerformActionInJobException state brokerMessage)
+  mTimeout <- Timeout.timeout timeoutS (runAction state brokerMessage)
 
   let archiveHandler = do
         case archiveStrategy mdata of
@@ -91,20 +140,18 @@ handleMessage state@(State { .. }) brokerMessage = do
   -- onMessageFetched broker queue msg
 
 
--- | It's important to know if an exception occured inside a job. This
--- way we can apply error recovering strategy and adjust this job in
--- the broker
-wrapPerformActionInJobException :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
-wrapPerformActionInJobException state@(State { onJobError }) brokerMessage = do
-  catch (do
-            runAction state brokerMessage
-        )
-    (\err -> do
-        callWorkerJobEvent onJobError state brokerMessage
-        let wrappedErr = JobException { jeBMessage = brokerMessage,
-                                      jeException = err }
-        throwIO wrappedErr
-        )
+-- -- | It's important to know if an exception occured inside a job. This
+-- -- way we can apply error recovering strategy and adjust this job in
+-- -- the broker
+-- wrapPerformActionInJobException :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
+-- wrapPerformActionInJobException state@(State { onJobError }) brokerMessage = do
+--   catch (do
+--             runAction state brokerMessage
+--         )
+--     (\(err :: SomeException) -> do
+--         callWorkerJobEvent onJobError state brokerMessage
+--         throwIO err
+--         )
 
 
 callWorkerJobEvent :: (HasWorkerBroker b a)
@@ -116,11 +163,11 @@ callWorkerJobEvent Nothing _ _ = pure ()
 callWorkerJobEvent (Just event) state brokerMessage = event state brokerMessage
 
 handleTimeoutError :: (HasWorkerBroker b a) => State b a -> JobTimeout b a -> IO ()
-handleTimeoutError state@(State { .. }) jt@(JobTimeout { .. }) = do
-  putStrLn $ formatStr state $ show jt
+handleTimeoutError _state@(State { .. }) _jt@(JobTimeout { .. }) = do
+  -- putStrLn $ formatStr state $ show jt
   let msgId = messageId jtBMessage
   let job = toA $ getMessage jtBMessage
-  putStrLn $ formatStr state $ "timeout for job: " <> show job
+  -- putStrLn $ formatStr state $ "timeout for job: " <> show job
   let mdata = metadata job
   case timeoutStrategy mdata of
     TSDelete -> deleteMessage broker queueName msgId
@@ -136,24 +183,32 @@ handleTimeoutError state@(State { .. }) jt@(JobTimeout { .. }) = do
         -- here? (i.e. delete, then resend)
         -- Also, be aware that messsage id will change with resend
 
-        -- Delete original job first
+        -- Delete this job first, otherwise we'll be duplicating jobs.
         deleteMessage broker queueName msgId
-        -- Send this job again, with increased 'readCount'
-        sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
-    TSRepeatNElseDelete _n -> do
-      -- TODO Implement 'readCt'
-      undefined
-      -- OK so this can be repeated at most 'n' times, compare 'readCt' with 'n'
-      -- if readCt > n then
-      --   PGMQ.deleteMessage conn queue messageId
-      -- else
-      --   pure ()                      
 
-handleJobError :: (HasWorkerBroker b a) => State b a -> JobException b a -> IO ()
-handleJobError state@(State { .. }) je@(JobException {  .. }) = do
-  let msgId = messageId jeBMessage
-  let job = toA $ getMessage jeBMessage
-  putStrLn $ formatStr state $ "error: " <> show je <> " for job " <> show job
+        -- Send this job again, with increased 'readCount'
+        void $ sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
+    TSRepeatNElseDelete n -> do
+      let readCt = readCount mdata
+      -- OK so this can be repeated at most 'n' times, compare 'readCt' with 'n'
+      if readCt >= n then
+        deleteMessage broker queueName msgId
+      else do
+        -- NOTE In rare cases, when worker hangs, we might lose a job
+        -- here? (i.e. delete, then resend)
+        -- Also, be aware that messsage id will change with resend
+
+        -- Delete this job first, otherwise we'll be duplicating jobs.
+        deleteMessage broker queueName msgId
+
+        -- Send this job again, with increased 'readCount'
+        void $ sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
+
+handleJobError :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
+handleJobError _state@(State { .. }) brokerMessage = do
+  let msgId = messageId brokerMessage
+  let job = toA $ getMessage brokerMessage
+  -- putStrLn $ formatStr state $ "error: " <> show je <> " for job " <> show job
   let mdata = metadata job
   case errorStrategy mdata of
     ESDelete -> deleteMessage broker queueName msgId
@@ -162,14 +217,18 @@ handleJobError state@(State { .. }) je@(JobException {  .. }) = do
       let readCt = readCount mdata
       if readCt >= n then
         archiveMessage broker queueName msgId
-      else
-        sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
+      else do
+        -- Delete this job first, otherwise we'll be duplicating jobs.
+        deleteMessage broker queueName msgId
+
+        void $ sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
 
 handleUnknownError :: (HasWorkerBroker b a) => State b a -> SomeException -> IO ()
 handleUnknownError state err = do
+  let _ = traceStack ("unknown error: " <> show err)
   putStrLn $ formatStr state $ "unknown error: " <> show err
 
-sendJob :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a -> IO ()
+sendJob :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a -> IO (MessageId b)
 sendJob broker queueName job = do
   sendMessage broker queueName $ toMessage job
 
@@ -184,14 +243,15 @@ microsecond = 10^(6 :: Int)
 
 -- | Wraps parameters for the 'sendJob' function
 data (HasWorkerBroker b a) => SendJob b a =
-  SendJob { broker    :: Broker b (Job a)
-          , queue     :: Queue
-          , msg       :: a
+  SendJob { broker       :: Broker b (Job a)
+          , queue        :: Queue
+          , msg          :: a
           -- , delay     :: Delay
-          , archStrat :: ArchiveStrategy
-          , errStrat  :: ErrorStrategy
-          , toStrat   :: TimeoutStrategy
-          , timeout   :: Timeout }
+          , archStrat    :: ArchiveStrategy
+          , errStrat     :: ErrorStrategy
+          , toStrat      :: TimeoutStrategy
+          , timeout      :: Timeout
+          , resendOnKill :: Bool}
 
 -- | Create a 'SendJob' data with some defaults
 mkDefaultSendJob :: HasWorkerBroker b a
@@ -211,7 +271,8 @@ mkDefaultSendJob broker queue msg timeout =
           , errStrat = ESArchive
           -- | repeat timed out jobs
           , toStrat = TSRepeat
-          , timeout }
+          , timeout
+          , resendOnKill = True }
 
 
 -- | Like 'mkDefaultSendJob' but with default timeout
@@ -226,12 +287,12 @@ mkDefaultSendJob' b q m = mkDefaultSendJob b q m defaultTimeout
 
     
 -- | Call 'sendJob' with 'SendJob b a' data
-sendJob' :: (HasWorkerBroker b a) => SendJob b a -> IO ()
+sendJob' :: (HasWorkerBroker b a) => SendJob b a -> IO (MessageId b)
 sendJob' (SendJob { .. }) = do
-  let metadata = JobMetadata { archiveStrategy = archStrat
-                             , errorStrategy = errStrat
-                             , timeoutStrategy = toStrat
-                             , timeout = timeout
-                             , readCount = 0 }
+  let metadata = defaultMetadata { archiveStrategy = archStrat
+                                 , errorStrategy = errStrat
+                                 , timeoutStrategy = toStrat
+                                 , timeout = timeout
+                                 , resendWhenWorkerKilled = resendOnKill }
   let job = Job { job = msg, metadata }
   sendJob broker queue job

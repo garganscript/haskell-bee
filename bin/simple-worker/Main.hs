@@ -14,6 +14,7 @@ import Async.Worker.Types (State(..), PerformAction, getJob, formatStr, TimeoutS
 import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Exception (Exception, throwIO)
+import Control.Monad (void)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), withObject, withText)
 import Data.Text qualified as T
 import Database.PostgreSQL.Simple qualified as PSQL
@@ -75,7 +76,7 @@ main :: IO ()
 main = do
   let connInfo = PSQL.defaultConnectInfo { PSQL.connectUser = "postgres"
                                          , PSQL.connectDatabase = "postgres" }
-  let brokerInitParams = PGMQBrokerInitParams connInfo :: BrokerInitParams PGMQBroker (Job Message)
+  let brokerInitParams = PGMQBrokerInitParams connInfo 10 :: BrokerInitParams PGMQBroker (Job Message)
 
   let queue = "simple_worker"
   
@@ -108,17 +109,17 @@ main = do
   let mkJob msg = mkDefaultSendJob' broker queue msg
     
   mapM_ (\idx -> do
-    sendJob' $ mkJob $ Ping
-    sendJob' $ mkJob $ Wait 1
-    sendJob' $ mkJob $ Echo $ "hello " <> show idx
-    sendJob' $ mkJob $ Error $ "error " <> show idx
+    void $ sendJob' $ mkJob $ Ping
+    void $ sendJob' $ mkJob $ Wait 1
+    void $ sendJob' $ mkJob $ Echo $ "hello " <> show idx
+    void $ sendJob' $ mkJob $ Error $ "error " <> show idx
     ) tasksLst
 
   -- a job that will timeout
   let timedOut =
         (mkDefaultSendJob broker queue (Wait 5) 1)
           { toStrat = TSRepeatNElseArchive 3 }
-  sendJob' timedOut
+  void $ sendJob' timedOut
     
   threadDelay (10*second)
 
