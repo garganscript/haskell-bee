@@ -190,7 +190,7 @@ beePrefix = "bee-"
 
 -- | Redis counter that returns message ids
 idKey :: Queue -> BS.ByteString
-idKey queue = BS.pack $ beePrefix <> "key-" <> queue
+idKey queue = BS.pack $ beePrefix <> "sequence-" <> queue
 
 nextId :: Broker RedisBroker a -> Queue -> IO (Maybe Int)
 nextId (RedisBroker' { conn }) queue = do
@@ -203,6 +203,15 @@ nextId (RedisBroker' { conn }) queue = do
 -- | Key under which a message is stored
 messageKey :: Queue -> MessageId RedisBroker -> BS.ByteString
 messageKey queue (RedisMid msgId) = queueKey queue <> BS.pack ("-message-" <> show msgId)
+
+-- | Key for storing the set of message ids in queue
+queueKey :: Queue -> BS.ByteString
+queueKey queue = BS.pack $ beePrefix <> "queue-" <> queue
+
+-- | Key for storing the set of message ids in archive
+archiveKey :: Queue -> BS.ByteString
+archiveKey queue = BS.pack $ beePrefix <> "archive-" <> queue
+              
 
 getRedisMessage :: FromJSON a
                => Broker RedisBroker a
@@ -219,15 +228,6 @@ getRedisMessage (RedisBroker' { conn }) queue msgId = do
       case Aeson.decode (BSL.fromStrict msg) of
         Just dmsg -> return $ Just $ RedisBM dmsg
         Nothing -> return Nothing
-
--- | Key for storing the set of message ids in queue
-queueKey :: Queue -> BS.ByteString
-queueKey queue = BS.pack $ beePrefix <> "queue-" <> queue
-
--- | Key for storing the set of message ids in archive
-archiveKey :: Queue -> BS.ByteString
-archiveKey queue = BS.pack $ beePrefix <> "archive-" <> queue
-              
     
 -- | Helper datatype to store message with a unique id.
 -- We fetch the id by using 'INCR'
@@ -246,3 +246,4 @@ instance ToJSON a => ToJSON (RedisWithMsgId a) where
       "rmida" .= rmida
     , "rmidId" .= rmidId
     ]
+
