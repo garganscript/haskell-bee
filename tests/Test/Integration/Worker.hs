@@ -117,7 +117,7 @@ initState bInitParams events queue workerName = do
   b' <- BT.initBroker bInitParams
   let state = State { broker = b'
                     , queueName = queue
-                    , name = workerName <> " for " <> queue
+                    , name = workerName <> " for " <> BT.renderQueue queue
                     , performAction = pa
                     , onMessageReceived = Just (pushEvt EMessageReceived)
                     , onJobFinish = Just (pushEvt EJobFinished)
@@ -391,12 +391,12 @@ workerTests brokerInitParams =
 
       -- Now let's kill the thread immediately
       throwTo threadId KillWorkerSafely
-      putStrLn $ "After KillWorkerSafely: " <> queueName
+      putStrLn $ "After KillWorkerSafely: " <> BT.renderQueue queueName
 
       -- The message should still be there
       threadDelay (300 * 1000)
       BT.getQueueSize broker queueName >>= \qs -> do
-        putStrLn $ "After threadDelay: " <> queueName <> " size: " <> show qs
+        putStrLn $ "After threadDelay: " <> BT.renderQueue queueName <> " size: " <> show qs
         qs  `shouldBe` 1
 
     it "killing worker should discard the currently processed message (when resendWhenWorkerKilled is False)" $ \(TestEnv { broker, queueName, events, threadId }) -> do

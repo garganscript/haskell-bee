@@ -118,7 +118,7 @@ handleMessage state@(State { .. }) brokerMessage = do
   -- Inform the broker how long a task could take. This way we prevent
   -- the broker from sending this task to another worker (e.g. 'vt' in
   -- PGMQ).
-  setMessageTimeout broker queueName msgId timeoutS
+  setMessageTimeout broker queueName msgId (TimeoutS timeoutS)
   -- mTimeout <- Timeout.timeout timeoutS (wrapPerformActionInJobException state brokerMessage)
   mTimeout <- Timeout.timeout timeoutS (runAction state brokerMessage)
 

@@ -33,7 +33,7 @@ module Async.Worker.Broker.Redis
   , RedisWithMsgId(..) )
 where
 
-import Async.Worker.Broker.Types (MessageBroker(..), Queue, SerializableMessage)
+import Async.Worker.Broker.Types (MessageBroker(..), Queue, SerializableMessage, renderQueue)
 -- import Control.Concurrent (threadDelay)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
@@ -190,7 +190,7 @@ beePrefix = "bee-"
 
 -- | Redis counter that returns message ids
 idKey :: Queue -> BS.ByteString
-idKey queue = BS.pack $ beePrefix <> "sequence-" <> queue
+idKey queue = BS.pack $ beePrefix <> "sequence-" <> renderQueue queue
 
 nextId :: Broker RedisBroker a -> Queue -> IO (Maybe Int)
 nextId (RedisBroker' { conn }) queue = do
@@ -206,11 +206,11 @@ messageKey queue (RedisMid msgId) = queueKey queue <> BS.pack ("-message-" <> sh
 
 -- | Key for storing the set of message ids in queue
 queueKey :: Queue -> BS.ByteString
-queueKey queue = BS.pack $ beePrefix <> "queue-" <> queue
+queueKey queue = BS.pack $ beePrefix <> "queue-" <> renderQueue queue
 
 -- | Key for storing the set of message ids in archive
 archiveKey :: Queue -> BS.ByteString
-archiveKey queue = BS.pack $ beePrefix <> "archive-" <> queue
+archiveKey queue = BS.pack $ beePrefix <> "archive-" <> renderQueue queue
               
 
 getRedisMessage :: FromJSON a

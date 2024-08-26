@@ -8,17 +8,19 @@ Stability   : experimental
 Portability : POSIX
 -}
 
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE ViewPatterns #-}
     
 module Async.Worker.Broker.PGMQ
   ( PGMQBroker
   , BrokerInitParams(..) )
 where
 
-import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage)
+import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage, renderQueue, TimeoutS(..))
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (withMVar)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
@@ -60,10 +62,10 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     pure $ PGMQBroker' { conn, defaultVt }
   deinitBroker (PGMQBroker' { conn }) = PSQL.close conn
   
-  createQueue (PGMQBroker' { conn }) queue = do
+  createQueue (PGMQBroker' { conn }) (renderQueue -> queue) = do
     PGMQ.createQueue conn queue
 
-  dropQueue (PGMQBroker' { conn }) queue = do
+  dropQueue (PGMQBroker' { conn }) (renderQueue -> queue) = do
     PGMQ.dropQueue conn queue
 
   readMessageWaiting q@(PGMQBroker' { conn, defaultVt }) queue = loop
@@ -75,7 +77,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
         -- can't reliably use it in a highly concurrent situation.
         
         -- mMsg <- PGMQ.readMessageWithPoll conn queue 10 5 100
-        mMsg <- PGMQ.readMessage conn queue defaultVt
+        mMsg <- PGMQ.readMessage conn (renderQueue queue) defaultVt
         case mMsg of
           Nothing -> do
             -- wait a bit, then retry
@@ -90,7 +92,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
       -- loop :: PGMQ.SerializableMessage a => IO (BrokerMessage PGMQBroker' a)
       loop = do
         -- mMsg <- PGMQ.readMessageWithPoll conn queue 10 5 100
-        mMsg <- PGMQ.popMessage conn queue
+        mMsg <- PGMQ.popMessage conn (renderQueue queue)
         case mMsg of
           Nothing -> do
             -- wait a bit, then retry
@@ -100,19 +102,19 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
             -- TODO! we want to set message visibility timeout so that other workers don't start this job
             return $ PGMQBM msg
 
-  setMessageTimeout (PGMQBroker' { conn }) queue (PGMQMid msgId) timeoutS =
+  setMessageTimeout (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) (TimeoutS timeoutS) =
     PGMQ.setMessageVt conn queue msgId timeoutS
 
-  sendMessage (PGMQBroker' { conn }) queue (PGMQM message) =
+  sendMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQM message) =
     PGMQMid <$> PGMQ.sendMessage conn queue message 0
 
-  deleteMessage (PGMQBroker' { conn }) queue (PGMQMid msgId) = do
+  deleteMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     PGMQ.deleteMessage conn queue msgId
 
-  archiveMessage (PGMQBroker' { conn }) queue (PGMQMid msgId) = do
+  archiveMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     PGMQ.archiveMessage conn queue msgId
 
-  getQueueSize (PGMQBroker' { conn }) queue = do
+  getQueueSize (PGMQBroker' { conn }) (renderQueue -> queue) = do
     -- NOTE: pgmq.metrics is NOT a proper way to deal with messages
     -- that have vt in the future
     -- (c.f. https://github.com/tembo-io/pgmq/issues/301)
@@ -122,6 +124,6 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     --   Just (PGMQ.Metrics { queueLength }) -> return queueLength
     PGMQ.queueAvailableLength conn queue
 
-  getArchivedMessage (PGMQBroker' { conn }) queue (PGMQMid msgId) = do
+  getArchivedMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     mMsg <- PGMQ.readMessageFromArchive conn queue msgId
     pure $ PGMQBM <$> mMsg

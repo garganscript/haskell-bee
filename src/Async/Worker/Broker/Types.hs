@@ -11,15 +11,18 @@ Broker typeclass definition.
 -}
 
 
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
     
 module Async.Worker.Broker.Types
-  ( Queue
-  , TimeoutS
+  ( Queue(..)
+  , renderQueue
+  , TimeoutS(..)
   -- * Main broker typeclass
   -- $broker
   , MessageBroker(..)
@@ -29,12 +32,21 @@ where
 
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Kind (Type)
+import Data.String (IsString)
+import Data.Text qualified as T
 import Data.Typeable (Typeable)
 
 
-type Queue = String
-type TimeoutS = Int  -- timeout for a message, in seconds
+newtype Queue = Queue { _Queue :: T.Text }
+  deriving stock (Eq, Ord)
+  deriving newtype (Semigroup, IsString, Show)
 
+newtype TimeoutS = TimeoutS { _TimeoutS :: Int  } -- timeout for a message, in seconds
+  deriving stock (Eq, Ord)
+  deriving newtype (Num, Show)
+
+renderQueue :: Queue -> String
+renderQueue = T.unpack . _Queue
 
 {- $broker
 /NOTE/ There are 3 types of messages here:

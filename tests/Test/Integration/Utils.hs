@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Test.Integration.Utils
   ( defaultPGMQVt
   , getPSQLEnvConnectInfo
@@ -15,6 +17,7 @@ import Control.Concurrent (threadDelay)
 import Control.Concurrent.STM.TVar (TVar, readTVarIO)
 import Control.Monad (unless)
 import Data.Maybe (fromMaybe)
+import Data.String (fromString)
 import Database.PostgreSQL.Simple qualified as PSQL
 import Database.Redis qualified as Redis
 import System.Environment (lookupEnv)
@@ -66,7 +69,7 @@ getRedisEnvConnectInfo = do
 -- | Given a queue prefix, add a random suffix to create a queue name
 randomQueueName :: B.Queue -> IO B.Queue
 randomQueueName prefix = do
-  postfix <- randomString (onlyLower randomASCII) 10
+  postfix <- fromString <$> randomString (onlyLower randomASCII) 10
   return $ prefix <> "_" <> postfix
 
 

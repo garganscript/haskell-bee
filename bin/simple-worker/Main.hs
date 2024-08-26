@@ -9,7 +9,7 @@ where
 
 import Async.Worker (sendJob', mkDefaultSendJob, mkDefaultSendJob', SendJob(..), run)
 import Async.Worker.Broker.PGMQ (PGMQBroker, BrokerInitParams(PGMQBrokerInitParams))
-import Async.Worker.Broker.Types (Broker, getMessage, toA, initBroker)
+import Async.Worker.Broker.Types (Broker, getMessage, toA, initBroker, renderQueue)
 import Async.Worker.Types (State(..), PerformAction, getJob, formatStr, TimeoutStrategy(..), Job)
 import Control.Applicative ((<|>))
 import Control.Concurrent (forkIO, threadDelay)
@@ -123,7 +123,7 @@ main = do
     
   threadDelay (10*second)
 
-  metrics <- PGMQ.getMetrics conn queue
+  metrics <- PGMQ.getMetrics conn (renderQueue queue)
   putStrLn $ "metrics: " <> show metrics
 
   return ()
