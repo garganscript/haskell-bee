@@ -18,7 +18,7 @@ module Async.Worker.Broker.PGMQ
   , BrokerInitParams(..) )
 where
 
-import Async.Worker.Broker.Types (HasBroker(..), SerializableMessage)
+import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage)
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (withMVar)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
@@ -30,7 +30,7 @@ import Database.PGMQ.Types qualified as PGMQ
 
 data PGMQBroker
 
-instance (SerializableMessage a, Show a) => HasBroker PGMQBroker a where
+instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   data Broker PGMQBroker a =
     PGMQBroker' {
         conn :: PSQL.Connection

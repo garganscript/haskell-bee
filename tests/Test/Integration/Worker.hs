@@ -97,7 +97,7 @@ pa _state bm = do
     Error -> throwIO $ SimpleException "Error!"
     Timeout { delay } -> threadDelay (delay * second)
 
-pushEvent :: BT.HasBroker b (Job Message)
+pushEvent :: BT.MessageBroker b (Job Message)
           => TVar [Event]
           -> (Message -> Event)
           -> BT.BrokerMessage b (Job Message)

@@ -33,7 +33,7 @@ module Async.Worker.Broker.Redis
   , RedisWithMsgId(..) )
 where
 
-import Async.Worker.Broker.Types (HasBroker(..), Queue, SerializableMessage)
+import Async.Worker.Broker.Types (MessageBroker(..), Queue, SerializableMessage)
 -- import Control.Concurrent (threadDelay)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
@@ -45,7 +45,7 @@ import Database.Redis qualified as Redis
 
 data RedisBroker
 
-instance (SerializableMessage a, Show a) => HasBroker RedisBroker a where
+instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
   data Broker RedisBroker a =
     RedisBroker' {
         conn :: Redis.Connection

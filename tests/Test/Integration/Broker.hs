@@ -42,7 +42,7 @@ instance FromJSON Message where
     pure $ Message { text = T.unpack text }
 
 
-withBroker :: (BT.HasBroker b Message)
+withBroker :: (BT.MessageBroker b Message)
            => BT.BrokerInitParams b Message
            -> (TestEnv b -> IO ())
            -> IO ()
@@ -50,7 +50,7 @@ withBroker bInitParams = bracket (setUpBroker bInitParams) tearDownBroker
   where
     -- NOTE I need to pass 'b' again, otherwise GHC can't infer the
     -- type of 'b' (even with 'ScopedTypeVariables' turned on)
-    setUpBroker :: (BT.HasBroker b Message)
+    setUpBroker :: (BT.MessageBroker b Message)
                 => BT.BrokerInitParams b Message -> IO (TestEnv b)
     setUpBroker bInit = do
       b <- BT.initBroker bInit
@@ -67,7 +67,7 @@ withBroker bInitParams = bracket (setUpBroker bInitParams) tearDownBroker
       BT.deinitBroker broker
 
 
-brokerTests :: (BT.HasBroker b Message)
+brokerTests :: (BT.MessageBroker b Message)
             => BT.BrokerInitParams b Message -> Spec
 brokerTests bInitParams =
   parallel $ around (withBroker bInitParams) $ describe "Broker tests" $ do

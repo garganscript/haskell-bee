@@ -125,7 +125,7 @@ waitUntilTVarPred tvar predicate (TimeoutMs timeoutMs) = do
           threadDelay waitThreadDelay
           performTest
 
-waitUntilQueueSizeIs :: (B.HasBroker b a) => B.Broker b a -> B.Queue -> Int -> TimeoutMs -> Expectation
+waitUntilQueueSizeIs :: (B.MessageBroker b a) => B.Broker b a -> B.Queue -> Int -> TimeoutMs -> Expectation
 waitUntilQueueSizeIs b queue size (TimeoutMs timeoutMs) = do
   _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
 
@@ -141,5 +141,5 @@ waitUntilQueueSizeIs b queue size (TimeoutMs timeoutMs) = do
           threadDelay waitThreadDelay
           performTest
 
-waitUntilQueueEmpty :: (B.HasBroker b a) => B.Broker b a -> B.Queue -> TimeoutMs -> Expectation
+waitUntilQueueEmpty :: (B.MessageBroker b a) => B.Broker b a -> B.Queue -> TimeoutMs -> Expectation
 waitUntilQueueEmpty b queue timeoutMs = waitUntilQueueSizeIs b queue 0 timeoutMs

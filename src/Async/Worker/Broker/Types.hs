@@ -22,7 +22,7 @@ module Async.Worker.Broker.Types
   , TimeoutS
   -- * Main broker typeclass
   -- $broker
-  , HasBroker(..)
+  , MessageBroker(..)
   , SerializableMessage
   )
 where
@@ -73,7 +73,7 @@ class (
         Eq (MessageId b)
       , Show (MessageId b)
       , Show (BrokerMessage b a)
-      ) => HasBroker b a where
+      ) => MessageBroker b a where
   -- | Data representing the broker
   data family Broker b a :: Type
   -- | Data represenging message that is returned by broker. You're

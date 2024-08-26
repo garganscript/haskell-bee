@@ -44,7 +44,7 @@ module Async.Worker.Types
   , JobTimeout(..) )
 where
 
-import Async.Worker.Broker.Types (Broker, BrokerMessage, HasBroker, Queue)
+import Async.Worker.Broker.Types (Broker, BrokerMessage, MessageBroker, Queue)
 import Control.Applicative ((<|>))
 import Control.Exception.Safe (Exception)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), withObject, withText)
@@ -271,7 +271,7 @@ type PerformAction b a =
 
 -- | /TODO/ 'Show' 'a' could be removed. Any logging can be done as
 -- part of 'on' events in 'State'.
-type HasWorkerBroker b a = ( HasBroker b (Job a), Typeable a, Typeable b, Show a )
+type HasWorkerBroker b a = ( MessageBroker b (Job a), Typeable a, Typeable b, Show a )
 
 -- | Helper function to format a string with worker name (for logging)
 formatStr :: (HasWorkerBroker b a) => State b a -> String -> String
