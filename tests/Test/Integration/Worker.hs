@@ -89,7 +89,7 @@ instance Exception SimpleException
 
 
 -- | Perform Action for this worker
-pa :: (HasWorkerBroker b Message) => State b a -> BT.BrokerMessage b (Job Message) -> IO ()
+pa :: (HasWorkerBroker b Message) => State b Message -> BT.BrokerMessage b (Job Message) -> IO ()
 pa _state bm = do
   let job' = BT.toA $ BT.getMessage bm
   case job job' of
