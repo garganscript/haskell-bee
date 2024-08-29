@@ -154,8 +154,7 @@ handleMessage state@(State { .. }) brokerMessage = do
 --         )
 
 
-callWorkerJobEvent :: (HasWorkerBroker b a)
-                   => WorkerJobEvent b a
+callWorkerJobEvent :: WorkerJobEvent b a
                    -> State b a
                    -> BrokerMessage b (Job a)
                    -> IO ()
@@ -223,7 +222,7 @@ handleJobError _state@(State { .. }) brokerMessage = do
 
         void $ sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
 
-handleUnknownError :: (HasWorkerBroker b a) => State b a -> SomeException -> IO ()
+handleUnknownError :: State b a -> SomeException -> IO ()
 handleUnknownError state err = do
   let _ = traceStack ("unknown error: " <> show err)
   putStrLn $ formatStr state $ "unknown error: " <> show err
@@ -242,7 +241,7 @@ microsecond = 10^(6 :: Int)
 -}
 
 -- | Wraps parameters for the 'sendJob' function
-data (HasWorkerBroker b a) => SendJob b a =
+data SendJob b a =
   SendJob { broker       :: Broker b (Job a)
           , queue        :: Queue
           , msg          :: a
@@ -254,8 +253,7 @@ data (HasWorkerBroker b a) => SendJob b a =
           , resendOnKill :: Bool}
 
 -- | Create a 'SendJob' data with some defaults
-mkDefaultSendJob :: HasWorkerBroker b a
-                 => Broker b (Job a)
+mkDefaultSendJob :: Broker b (Job a)
                  -> Queue
                  -> a
                  -> Timeout
@@ -276,8 +274,7 @@ mkDefaultSendJob broker queue msg timeout =
 
 
 -- | Like 'mkDefaultSendJob' but with default timeout
-mkDefaultSendJob' :: HasWorkerBroker b a
-                  => Broker b (Job a)
+mkDefaultSendJob' :: Broker b (Job a)
                   -> Queue
                   -> a
                   -> SendJob b a

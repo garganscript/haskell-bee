@@ -112,7 +112,7 @@ waitUntilTVarEq tvar expected (TimeoutMs timeoutMs) = do
           performTest
 
 -- | Similar to 'waitUntilTVarEq' but with predicate checking
-waitUntilTVarPred :: (HasCallStack, Show a, Eq a) => TVar a -> (a -> Bool) -> TimeoutMs -> Expectation
+waitUntilTVarPred :: (HasCallStack, Show a) => TVar a -> (a -> Bool) -> TimeoutMs -> Expectation
 waitUntilTVarPred tvar predicate (TimeoutMs timeoutMs) = do
   _mTimeout <- Timeout.timeout (timeoutMs * 1000) performTest
   -- shortcut for testing mTimeout

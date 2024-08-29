@@ -238,7 +238,7 @@ jobTimeout (Job { metadata }) = timeout metadata
 --
 -- Note that our underlying 'Broker' handles messages of type 'Job'
 -- 'a'.
-data (HasWorkerBroker b a) => State b a =
+data State b a =
   State { broker            :: Broker b (Job a)
         -- | Queue associated with this worker. If you want to support
         -- more queues, spawn more workers.
@@ -259,7 +259,7 @@ data (HasWorkerBroker b a) => State b a =
 
 -- | Helper function to call an action for given worker, for a
 -- 'BrokerMessage'.
-runAction :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
+runAction :: State b a -> BrokerMessage b (Job a) -> IO ()
 runAction state brokerMessage = (performAction state) state brokerMessage
 
 type WorkerJobEvent b a = Maybe (State b a -> BrokerMessage b (Job a) -> IO ())
@@ -274,7 +274,7 @@ type PerformAction b a =
 type HasWorkerBroker b a = ( MessageBroker b (Job a), Typeable a, Typeable b, Show a )
 
 -- | Helper function to format a string with worker name (for logging)
-formatStr :: (HasWorkerBroker b a) => State b a -> String -> String
+formatStr :: State b a -> String -> String
 formatStr (State { name }) msg =
   "[" <> name <> "] " <> msg
 
@@ -282,5 +282,5 @@ formatStr (State { name }) msg =
 data JobTimeout b a =
   JobTimeout { jtBMessage  :: BrokerMessage b (Job a)
              , jtTimeout   :: Timeout }
-deriving instance (HasWorkerBroker b a) => Show (JobTimeout b a)
-instance (HasWorkerBroker b a) => Exception (JobTimeout b a)
+deriving instance (Show (BrokerMessage b (Job a))) => Show (JobTimeout b a)
+instance (Show (BrokerMessage b (Job a)), Typeable a, Typeable b) => Exception (JobTimeout b a)
