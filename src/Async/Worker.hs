@@ -41,7 +41,6 @@ import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, writeTVar)
 import Control.Exception.Safe (catches, Handler(..), throwIO, SomeException, Exception)
 import Control.Monad (forever, void, when)
-import Debug.Trace (traceStack)
 import System.Timeout qualified as Timeout
 
 
@@ -223,9 +222,7 @@ handleJobError _state@(State { .. }) brokerMessage = do
         void $ sendJob broker queueName (job { metadata = mdata { readCount = readCt + 1 } })
 
 handleUnknownError :: State b a -> SomeException -> IO ()
-handleUnknownError state err = do
-  let _ = traceStack ("unknown error: " <> show err)
-  putStrLn $ formatStr state $ "unknown error: " <> show err
+handleUnknownError state err = putStrLn $ formatStr state $ "unknown error: " <> show err
 
 sendJob :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a -> IO (MessageId b)
 sendJob broker queueName job = do
