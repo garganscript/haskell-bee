@@ -58,6 +58,8 @@ integration-tests:
     - name: docker.io/redis:7.2
       alias: redis
   variables:
+    # https://stackoverflow.com/questions/77173109/error-link-is-not-supported-in-gitlab-ci-cd-pipeline-when-executing-an-image-as
+    FF_NETWORK_PER_BUILD: 1
     # Configure postgres service (https://hub.docker.com/_/postgres/)
     POSTGRES_DB: pgmq
     POSTGRES_USER: pgmq
