@@ -14,12 +14,14 @@ module Test.Integration.Worker
  ( workerTests
  , multiWorkerTests
  , pgmqWorkerBrokerInitParams
- , redisWorkerBrokerInitParams )
+ , redisWorkerBrokerInitParams
+ , stmWorkerBrokerInitParams )
 where
 
 import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat, resendOnKill, KillWorkerSafely(..))
 import Async.Worker.Broker.PGMQ qualified as PGMQ
 import Async.Worker.Broker.Redis qualified as Redis
+import Async.Worker.Broker.STM qualified as STMB
 import Async.Worker.Broker.Types qualified as BT
 import Async.Worker.Types
 import Control.Concurrent (forkIO, killThread, threadDelay, ThreadId, throwTo)
@@ -28,6 +30,7 @@ import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, TVar, modifyTVar)
 import Control.Exception (bracket, Exception, throwIO)
 import Control.Monad (void)
 import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 import Test.Hspec
@@ -246,7 +249,7 @@ workerTests brokerInitParams =
       let msg = Timeout { delay = 2 }
       let job' = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSArchive }
       msgId <- sendJob' job'
- 
+
       waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 1200
 
       -- There might be a slight delay before the message is archived
@@ -544,3 +547,9 @@ pgmqWorkerBrokerInitParams = do
 redisWorkerBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker (Job Message))
 redisWorkerBrokerInitParams = do
   Redis.RedisBrokerInitParams <$> getRedisEnvConnectInfo
+
+stmWorkerBrokerInitParams :: IO (BT.BrokerInitParams STMB.STMBroker (Job Message))
+stmWorkerBrokerInitParams = do
+  archiveMap <- newTVarIO Map.empty
+  stmMap <- newTVarIO Map.empty
+  pure $  STMB.STMBrokerInitParams { .. }

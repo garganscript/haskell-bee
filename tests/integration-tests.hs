@@ -1,7 +1,7 @@
 module Main where
 
-import Test.Integration.Broker (brokerTests, pgmqBrokerInitParams, redisBrokerInitParams)
-import Test.Integration.Worker (workerTests, multiWorkerTests, pgmqWorkerBrokerInitParams, redisWorkerBrokerInitParams)
+import Test.Integration.Broker (brokerTests, pgmqBrokerInitParams, redisBrokerInitParams, stmBrokerInitParams)
+import Test.Integration.Worker (workerTests, multiWorkerTests, pgmqWorkerBrokerInitParams, redisWorkerBrokerInitParams, stmWorkerBrokerInitParams)
 import Test.Tasty
 import Test.Tasty.Hspec
 
@@ -21,6 +21,12 @@ main = do
   redisWorkerSpec <- testSpec "workerTests (redis)" (workerTests redisWBInitParams)
   redisMultiWorkerSpec <- testSpec "multiWorkerTests (redis)" (multiWorkerTests redisWBInitParams 5)
 
+  stmBInitParams <- stmBrokerInitParams
+  stmBrokerSpec <- testSpec "brokerTests (stm)" (brokerTests stmBInitParams)
+  stmWBInitParams <- stmWorkerBrokerInitParams
+  stmWorkerSpec <- testSpec "workerTests (stm)" (workerTests stmWBInitParams)
+  stmMultiWorkerSpec <- testSpec "multiWorkerTests (stm)" (multiWorkerTests stmWBInitParams 5)
+
   defaultMain $ testGroup "integration tests"
     [
       pgmqBrokerSpec
@@ -30,5 +36,9 @@ main = do
     , redisBrokerSpec
     , redisWorkerSpec
     , redisMultiWorkerSpec
-    ]
+
+    , stmBrokerSpec
+    , stmWorkerSpec
+    , stmMultiWorkerSpec 
+   ]
 

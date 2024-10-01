@@ -9,14 +9,18 @@
 module Test.Integration.Broker
  ( brokerTests
  , pgmqBrokerInitParams
- , redisBrokerInitParams )
+ , redisBrokerInitParams
+ , stmBrokerInitParams )
 where
 
 import Async.Worker.Broker.PGMQ qualified as PGMQ
 import Async.Worker.Broker.Redis qualified as Redis
+import Async.Worker.Broker.STM qualified as STMB
 import Async.Worker.Broker.Types qualified as BT
+import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (bracket)
 import Data.Aeson (ToJSON(..), FromJSON(..), withText)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Text qualified as T
 import Test.Hspec
@@ -127,3 +131,9 @@ pgmqBrokerInitParams = do
 redisBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker Message)
 redisBrokerInitParams = do
   Redis.RedisBrokerInitParams <$> getRedisEnvConnectInfo
+
+stmBrokerInitParams :: IO (BT.BrokerInitParams STMB.STMBroker Message)
+stmBrokerInitParams = do
+  archiveMap <- newTVarIO Map.empty
+  stmMap <- newTVarIO Map.empty
+  pure $ STMB.STMBrokerInitParams { .. }

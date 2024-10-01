@@ -67,6 +67,7 @@ library
                     , Async.Worker.Broker
                     , Async.Worker.Broker.PGMQ
                     , Async.Worker.Broker.Redis
+                    , Async.Worker.Broker.STM
                     , Async.Worker.Broker.Types
                     , Async.Worker.Types
 
@@ -80,6 +81,7 @@ library
     build-depends:    base ^>=4.17.2.0
                     , aeson >= 1.4 && < 2.3
                     , bytestring >= 0.11 && < 0.13
+                    , containers >= 0.6.7 && < 0.8
                     , haskell-pgmq >= 0.1.0.0 && < 0.2
                     , hedis >= 0.15.2 && < 0.16
                     , mtl >= 2.2 && < 2.4
@@ -91,6 +93,7 @@ library
                     , text >= 1.2 && < 2.2
                     , time >= 1.10 && < 1.15
                     , units >= 2.4 && < 2.5
+                    , unix-time >= 0.4.11 && < 0.5
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -103,6 +106,7 @@ library
       GeneralizedNewtypeDeriving
       ImportQualifiedPost
       NamedFieldPuns
+      NumericUnderscores
       OverloadedStrings
       RecordWildCards
       
@@ -147,6 +151,7 @@ test-suite test-unit
                     , tasty >= 1.5 && < 1.6
                     , tasty-hunit >= 0.10 && < 0.11
                     , tasty-quickcheck >= 0.10 && < 0.12
+                    , unix-time >= 0.4.11 && < 0.5
                     
                     , haskell-bee
 

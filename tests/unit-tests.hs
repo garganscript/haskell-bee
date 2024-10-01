@@ -3,8 +3,10 @@
 module Main where
 
 import Async.Worker.Broker.Redis qualified as R
+import Async.Worker.Broker.STM qualified as STMB
 import Async.Worker.Types qualified as WT
 import Data.Aeson qualified as Aeson
+import Data.UnixTime
 import Test.Tasty
 import Test.Tasty.QuickCheck as QC
     
@@ -21,7 +23,8 @@ propertyTests = testGroup "Property tests" [aesonPropTests]
 aesonPropTests = testGroup "Aeson (de-)serialization property tests" $
  [ aesonPropJobMetadataTests
  , aesonPropJobTests
- , aesonPropRedisTests ]
+ , aesonPropRedisTests
+ , aesonPropSTMBTests ]
 
 instance QC.Arbitrary WT.ArchiveStrategy where
   arbitrary = QC.elements [ WT.ASDelete, WT.ASArchive ]
@@ -74,6 +77,21 @@ aesonPropRedisTests = testGroup "Aeson RedisWithMsgId (de-)serialization tests" 
   [ QC.testProperty "Aeson.decode . Aeson.encode == id" $
      \j ->
        Aeson.decode (Aeson.encode (j :: R.RedisWithMsgId String)) == Just j
+  ]
+
+instance QC.Arbitrary a => QC.Arbitrary (STMB.STMWithMsgId a) where
+  arbitrary = do
+    stmidId <- arbitrary
+    stmida <- arbitrary
+    utSeconds <- arbitrary
+    utMicroSeconds <- arbitrary
+    let stmidInvisibleUntil = UnixTime { utSeconds, utMicroSeconds }
+    return $ STMB.STMWithMsgId { stmida, stmidId, stmidInvisibleUntil }
+
+aesonPropSTMBTests = testGroup "Aeson STMWithMsgId (de-)serialization tests" $
+  [ QC.testProperty "Aeson.decode . Aeson.encode == id" $
+     \j ->
+       Aeson.decode (Aeson.encode (j :: STMB.STMWithMsgId String)) == Just j
   ]
 
     
