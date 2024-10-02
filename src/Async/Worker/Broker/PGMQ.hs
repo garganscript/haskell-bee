@@ -58,7 +58,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     -- https://www.postgresql.org/docs/current/libpq-notice-processing.html
     withMVar (PSQLInternal.connectionHandle conn) $ \c -> do
       LibPQ.disableNoticeReporting c
-    PGMQ.initialize conn
+    -- PGMQ.initialize conn
     pure $ PGMQBroker' { conn, defaultVt }
   deinitBroker (PGMQBroker' { conn }) = PSQL.close conn
   
