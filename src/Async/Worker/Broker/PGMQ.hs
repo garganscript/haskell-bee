@@ -26,8 +26,7 @@ import Control.Concurrent.MVar (withMVar)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
 import Database.PostgreSQL.Simple qualified as PSQL
 import Database.PostgreSQL.Simple.Internal qualified as PSQLInternal
-import Database.PGMQ.Simple qualified as PGMQ
-import Database.PGMQ.Types qualified as PGMQ
+import Database.PGMQ qualified as PGMQ
 
 
 data PGMQBroker
@@ -105,8 +104,8 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   setMessageTimeout (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) (TimeoutS timeoutS) =
     PGMQ.setMessageVt conn queue msgId timeoutS
 
-  sendMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQM message) =
-    PGMQMid <$> PGMQ.sendMessage conn queue message 0
+  sendMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQM message) = do
+    PGMQMid <$> PGMQ.safeSendMessage conn queue message 0
 
   deleteMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     PGMQ.deleteMessage conn queue msgId

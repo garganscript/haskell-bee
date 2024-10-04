@@ -8,7 +8,7 @@ packages:
 source-repository-package
     type: git
     location: https://gitlab.iscpif.fr/gargantext/haskell-pgmq
-    tag: 91f80083d6158d7a2543b394961cfef0417a1048
+    tag: 0591a643d8ba1776af4fac56c1e4ff5fc3e98bb3
     
 tests: true
 
