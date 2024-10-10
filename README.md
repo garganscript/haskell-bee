@@ -37,6 +37,19 @@ This contains information such as:
   - after timeout occurred
   - after job error
 
+
+## Testing
+
+Start postgresql and redis:
+```shell
+podman run --rm -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres postgres
+podman run --rm -it -p 6379:6379 redis:latest
+```
+Then run tests:
+```shell
+cabal v2-test --test-show-details=streaming
+```
+
 ## Other work
 
 [Haskell Job Queues: An Ultimate Guide (2020)](https://www.haskelltutorials.com/odd-jobs/haskell-job-queues-ultimate-guide.html)

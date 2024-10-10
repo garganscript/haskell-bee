@@ -38,6 +38,7 @@ module Async.Worker.Types
   , PerformAction
   -- * Events emitted during job lifetime
   , WorkerJobEvent
+  , WorkerMJobEvent
   -- * Other useful types and functions
   , HasWorkerBroker
   , formatStr
@@ -255,7 +256,9 @@ data State b a =
         -- | Event emitted after job timed out
         , onJobTimeout      :: WorkerJobEvent b a
         -- | Event emitted after job ended with error
-        , onJobError        :: WorkerJobEvent b a }
+        , onJobError        :: WorkerJobEvent b a
+        -- | Event emitted when worker is safely killed (don't overuse it)
+        , onWorkerKilledSafely :: WorkerMJobEvent b a }
 
 -- | Helper function to call an action for given worker, for a
 -- 'BrokerMessage'.
@@ -263,6 +266,7 @@ runAction :: State b a -> BrokerMessage b (Job a) -> IO ()
 runAction state brokerMessage = (performAction state) state brokerMessage
 
 type WorkerJobEvent b a = Maybe (State b a -> BrokerMessage b (Job a) -> IO ())
+type WorkerMJobEvent b a = Maybe (State b a -> Maybe (BrokerMessage b (Job a)) -> IO ())
 
 -- | Callback definition (what to execute when a message arrives)
 type PerformAction b a =

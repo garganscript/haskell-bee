@@ -21,6 +21,7 @@ module Async.Worker.Broker.PGMQ
 where
 
 import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage, renderQueue, TimeoutS(..))
+import Data.ByteString qualified as BS
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (withMVar)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
@@ -42,14 +43,18 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   data Message PGMQBroker a = PGMQM a
   data MessageId PGMQBroker = PGMQMid Int
     deriving (Eq, Show)
-  data BrokerInitParams PGMQBroker a = PGMQBrokerInitParams PSQL.ConnectInfo PGMQ.VisibilityTimeout
+  data BrokerInitParams PGMQBroker a =
+      PGMQBrokerInitParams PSQL.ConnectInfo PGMQ.VisibilityTimeout
+    | PGMQBrokerInitConnStr BS.ByteString PGMQ.VisibilityTimeout
 
   messageId (PGMQBM (PGMQ.Message { msgId })) = PGMQMid msgId
   getMessage (PGMQBM (PGMQ.Message { message })) = PGMQM message
   toMessage message = PGMQM message
   toA (PGMQM message) = message
   initBroker (PGMQBrokerInitParams connInfo defaultVt) = do
-    conn <- PSQL.connect connInfo
+    initBroker (PGMQBrokerInitConnStr (PSQL.postgreSQLConnectionString connInfo) defaultVt)
+  initBroker (PGMQBrokerInitConnStr connStr defaultVt) = do
+    conn <- PSQL.connectPostgreSQL connStr
     -- PGMQ is quite verbose because of initialization. We can disable
     -- notices
     -- https://hackage.haskell.org/package/postgresql-simple-0.7.0.0/docs/src/Database.PostgreSQL.Simple.Internal.html#Connection

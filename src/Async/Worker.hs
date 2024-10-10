@@ -92,17 +92,20 @@ runSingle' state@(State { .. }) = do
               let mdata = metadata job
               -- Should we resend this message?
               when (resendWhenWorkerKilled mdata) $ do
-                putStrLn $ formatStr state $ "resending job: " <> show job
+                -- putStrLn $ formatStr state $ "resending job: " <> show job
                 void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
-                size <- getQueueSize broker queueName
-                putStrLn $ formatStr state $ "queue size: " <> show size
+                -- size <- getQueueSize broker queueName
+                -- putStrLn $ formatStr state $ "queue size: " <> show size
                 
               -- In any case, deinit the broker (i.e. close connection)
               -- deinitBroker broker
-              
-              -- kill worker
-              throwIO KillWorkerSafely
             Nothing -> pure ()
+            
+          -- callback
+          callWorkerMJobEvent onWorkerKilledSafely state mBrokerMessage
+          
+          -- kill worker
+          throwIO KillWorkerSafely
         , Handler $ \(err :: JobTimeout b a) -> handleTimeoutError state err
         , Handler $ \err -> do
             mBrokerMessage <- readTVarIO mBrokerMessageTVar
@@ -168,6 +171,13 @@ callWorkerJobEvent :: WorkerJobEvent b a
                    -> IO ()
 callWorkerJobEvent Nothing _ _ = pure ()
 callWorkerJobEvent (Just event) state brokerMessage = event state brokerMessage
+
+callWorkerMJobEvent :: WorkerMJobEvent b a
+                    -> State b a
+                    -> Maybe (BrokerMessage b (Job a))
+                    -> IO ()
+callWorkerMJobEvent Nothing _ _ = pure ()
+callWorkerMJobEvent (Just event) state mBrokerMessage = event state mBrokerMessage
 
 handleTimeoutError :: (HasWorkerBroker b a) => State b a -> JobTimeout b a -> IO ()
 handleTimeoutError _state@(State { .. }) _jt@(JobTimeout { .. }) = do

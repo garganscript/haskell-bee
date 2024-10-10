@@ -86,6 +86,7 @@ data Event =
   | EJobFinished Message
   | EJobTimeout Message
   | EJobError Message
+  | EWorkerKilledSafely (Maybe Message)
   deriving (Eq, Show, Ord)
 
 
@@ -110,6 +111,13 @@ pushEvent :: BT.MessageBroker b (Job Message)
           -> IO ()
 pushEvent events evt bm = atomically $ modifyTVar events (\e -> e ++ [evt $ job $ BT.toA $ BT.getMessage bm])
 
+pushEventMMsg :: BT.MessageBroker b (Job Message)
+             => TVar [Event]
+             -> (Maybe Message -> Event)
+             -> Maybe (BT.BrokerMessage b (Job Message))
+             -> IO ()
+pushEventMMsg events evt mbm = atomically $ modifyTVar events (\e -> e ++ [evt $ job <$> BT.toA <$> BT.getMessage <$> mbm])
+
 
 initState :: (HasWorkerBroker b Message)
           => BT.BrokerInitParams b (Job Message)
@@ -128,7 +136,8 @@ initState bInitParams events queue workerName = do
                     , onMessageReceived = Just (pushEvt EMessageReceived)
                     , onJobFinish = Just (pushEvt EJobFinished)
                     , onJobTimeout = Just (pushEvt EJobTimeout)
-                    , onJobError = Just (pushEvt EJobError) }
+                    , onJobError = Just (pushEvt EJobError)
+                    , onWorkerKilledSafely = Just (const $ pushEventMMsg events EWorkerKilledSafely) }
 
   threadId <- forkIO $ run state
 
@@ -399,8 +408,10 @@ workerTests brokerInitParams =
       throwTo threadId KillWorkerSafely
       putStrLn $ "After KillWorkerSafely: " <> BT.renderQueue queueName
 
+      waitUntilTVarEq events [ EMessageReceived msg
+                             , EWorkerKilledSafely (Just msg) ] 300
+      
       -- The message should still be there
-      threadDelay (300 * 1000)
       BT.getQueueSize broker queueName >>= \qs -> do
         putStrLn $ "After threadDelay: " <> BT.renderQueue queueName <> " size: " <> show qs
         qs  `shouldBe` 1
@@ -424,8 +435,10 @@ workerTests brokerInitParams =
       -- Now let's kill the thread immediately
       throwTo threadId KillWorkerSafely
 
+      waitUntilTVarEq events [ EMessageReceived msg
+                             , EWorkerKilledSafely (Just msg) ] 300
+
       -- The message shouldn't be there
-      threadDelay (300 * 1000)
       BT.getQueueSize broker queueName >>= shouldBe 0
 
 
