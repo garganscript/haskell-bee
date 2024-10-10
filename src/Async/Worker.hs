@@ -20,6 +20,8 @@ module Async.Worker
   ( KillWorkerSafely(..)
   -- * Running
   , run
+  , runSingle
+  , runSingle'
     -- * Sending jobs
   , sendJob
   -- ** 'SendJob' wrappers
@@ -61,10 +63,17 @@ instance Exception KillWorkerSafely
 run :: (HasWorkerBroker b a) => State b a -> IO ()
 run state@(State { .. }) = do
   createQueue broker queueName
-  forever loop
-  where
-    loop :: IO ()
-    loop = do
+  forever $ runSingle state
+
+-- | Fetch a single job and run it (create queue first)
+runSingle :: (HasWorkerBroker b a) => State b a -> IO ()
+runSingle state@(State { .. }) = do
+  createQueue broker queueName
+  runSingle' state
+
+-- | Fetch a single job and run it. Assumes the queue already exists
+runSingle' :: (HasWorkerBroker b a) => State b a -> IO ()
+runSingle' state@(State { .. }) = do
       -- TVar to hold currently processed job. This is used for
       -- exception handling.
       mBrokerMessageTVar <- newTVarIO Nothing -- :: IO (TVar (Maybe (BrokerMessage b (Job a))))
