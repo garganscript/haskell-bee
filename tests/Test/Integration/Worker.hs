@@ -29,10 +29,11 @@ import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, TVar, modifyTVar)
 import Control.Exception (bracket, Exception, throwIO)
 import Control.Monad (void)
-import Data.Aeson (ToJSON(..), FromJSON(..), object, (.=), (.:), withObject)
+import Data.Aeson (ToJSON, FromJSON)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
+import GHC.Generics (Generic)
 import Test.Hspec
 import Test.Integration.Utils (defaultPGMQVt, getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil, waitUntilTVarEq, waitUntilTVarPred, waitUntil, waitUntilQueueEmpty)
 
@@ -57,23 +58,25 @@ data Message =
     Message { text :: String }
   | Error
   | Timeout { delay :: Int }
-  deriving (Show, Eq, Ord)
-instance ToJSON Message where
-  toJSON (Message { text }) = toJSON $ object [ "type" .= ("Message" :: String), "text" .= text ]
-  toJSON Error = toJSON $ object [ "type" .= ("Error" :: String) ]
-  toJSON (Timeout { delay }) = toJSON $ object [ "type" .= ("Timeout" :: String), "delay" .= delay ]
-instance FromJSON Message where
-  parseJSON = withObject "Message" $ \o -> do
-    type_ <- o .: "type"
-    case type_ of
-      "Message" -> do
-        text <- o .: "text"
-        pure $ Message { text }
-      "Error" -> pure Error
-      "Timeout" -> do
-        delay <- o .: "delay"
-        pure $ Timeout { delay }
-      _ -> fail $ "Unknown type " <> type_
+  deriving (Show, Eq, Ord, Generic)
+instance ToJSON Message
+instance FromJSON Message
+-- instance ToJSON Message where
+--   toJSON (Message { text }) = toJSON $ object [ "type" .= ("Message" :: String), "text" .= text ]
+--   toJSON Error = toJSON $ object [ "type" .= ("Error" :: String) ]
+--   toJSON (Timeout { delay }) = toJSON $ object [ "type" .= ("Timeout" :: String), "delay" .= delay ]
+-- instance FromJSON Message where
+--   parseJSON = withObject "Message" $ \o -> do
+--     type_ <- o .: "type"
+--     case type_ of
+--       "Message" -> do
+--         text <- o .: "text"
+--         pure $ Message { text }
+--       "Error" -> pure Error
+--       "Timeout" -> do
+--         delay <- o .: "delay"
+--         pure $ Timeout { delay }
+--       _ -> fail $ "Unknown type " <> type_
 
 
 -- | We will handle job events from the worker to track what and how
