@@ -95,7 +95,8 @@ main = do
                         , onMessageReceived = Nothing
                         , onJobFinish = Nothing
                         , onJobTimeout = Nothing
-                        , onJobError = Nothing }
+                        , onJobError = Nothing
+                        , onWorkerKilledSafely = Nothing }
       forkIO $ run state
     ) workersLst
   

@@ -83,3 +83,10 @@ any job metadata structure like in haskell-bee. They fall into the
 - [redis-job-queue](https://hackage.haskell.org/package/redis-job-queue)
   (worth investigating the sorted set approach)
 - [poolboy](https://hackage.haskell.org/package/poolboy) (in-memory only)
+
+## Credit
+
+All credit goes to the [Gargantext
+team](https://www.gargantext.org/). This work was done as part of my
+contract there.
+

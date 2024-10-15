@@ -1,0 +1,10 @@
+with-compiler: ghc-9.4.8
+
+packages:
+        ./
+        ../        
+
+source-repository-package
+    type: git
+    location: https://gitlab.iscpif.fr/gargantext/haskell-pgmq
+    tag: 0591a643d8ba1776af4fac56c1e4ff5fc3e98bb3
