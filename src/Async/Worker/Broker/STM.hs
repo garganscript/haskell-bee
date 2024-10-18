@@ -25,9 +25,10 @@ import Async.Worker.Broker.Types (MessageBroker(..), Queue, _TimeoutS)
 import Control.Concurrent (threadDelay)
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar
-import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object, withScientific)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
+import Data.Scientific (floatingOrInteger)
 import Data.UnixTime
 import Safe (headMay)
 
@@ -188,3 +189,12 @@ instance ToJSON a => ToJSON (STMWithMsgId a) where
     , "stmidId" .= stmidId
     ]
 
+
+
+instance ToJSON (MessageId STMBroker) where
+  toJSON (STMMid i) = toJSON i
+instance FromJSON (MessageId STMBroker) where
+  parseJSON = withScientific "STMMid" $ \n ->
+    case floatingOrInteger n of
+      Right i -> pure $ STMMid i
+      Left (f :: Double) -> fail $ "Integer expected: " <> show f

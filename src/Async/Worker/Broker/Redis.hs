@@ -37,9 +37,10 @@ import Async.Worker.Broker.Types (MessageBroker(..), Queue, SerializableMessage,
 -- import Control.Concurrent (threadDelay)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
-import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object)
+import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object, withScientific)
 import Data.ByteString.Char8 qualified as BS
 import Data.ByteString.Lazy qualified as BSL
+import Data.Scientific (floatingOrInteger)
 import Database.Redis qualified as Redis
 
 
@@ -247,3 +248,12 @@ instance ToJSON a => ToJSON (RedisWithMsgId a) where
     , "rmidId" .= rmidId
     ]
 
+
+
+instance ToJSON (MessageId RedisBroker) where
+  toJSON (RedisMid i) = toJSON i
+instance FromJSON (MessageId RedisBroker) where
+  parseJSON = withScientific "RedisMid" $ \n ->
+    case floatingOrInteger n of
+      Right i -> pure $ RedisMid i
+      Left (f :: Double) -> fail $ "Integer expected: " <> show f

@@ -10,7 +10,6 @@ Portability : POSIX
 
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE ViewPatterns #-}
@@ -24,6 +23,8 @@ import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage, render
 import Data.ByteString qualified as BS
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (withMVar)
+import Data.Aeson (FromJSON(..), ToJSON(..), withScientific)
+import Data.Scientific (floatingOrInteger)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
 import Database.PostgreSQL.Simple qualified as PSQL
 import Database.PostgreSQL.Simple.Internal qualified as PSQLInternal
@@ -131,3 +132,13 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   getArchivedMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     mMsg <- PGMQ.readMessageFromArchive conn queue msgId
     pure $ PGMQBM <$> mMsg
+
+
+
+instance ToJSON (MessageId PGMQBroker) where
+  toJSON (PGMQMid i) = toJSON i
+instance FromJSON (MessageId PGMQBroker) where
+  parseJSON = withScientific "PGMQMid" $ \n ->
+    case floatingOrInteger n of
+      Right i -> pure $ PGMQMid i
+      Left (f :: Double) -> fail $ "Integer expected: " <> show f

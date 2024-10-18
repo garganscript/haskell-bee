@@ -84,6 +84,8 @@ type SerializableMessage a = ( FromJSON a
 class (
         Eq (MessageId b)
       , Show (MessageId b)
+      , ToJSON (MessageId b)
+      , FromJSON (MessageId b)
       , Show (BrokerMessage b a)
       ) => MessageBroker b a where
   -- | Data representing the broker
