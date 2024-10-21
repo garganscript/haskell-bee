@@ -47,7 +47,7 @@ instance (Show a) => MessageBroker STMBroker a where
     deriving (Show)
   data Message STMBroker a = STMM a
   data MessageId STMBroker = STMMid Int
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
   data BrokerInitParams STMBroker a =
     STMBrokerInitParams { archiveMap :: TVar (Map.Map Queue (Map.Map Int (STMWithMsgId a)))
                         , stmMap :: TVar (Map.Map Queue (Map.Map Int (STMWithMsgId a))) }

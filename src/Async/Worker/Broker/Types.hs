@@ -84,6 +84,7 @@ type SerializableMessage a = ( FromJSON a
 class (
         Eq (MessageId b)
       , Show (MessageId b)
+      , Ord (MessageId b)
       , ToJSON (MessageId b)
       , FromJSON (MessageId b)
       , Show (BrokerMessage b a)

@@ -43,7 +43,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     deriving (Show)
   data Message PGMQBroker a = PGMQM a
   data MessageId PGMQBroker = PGMQMid Int
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
   data BrokerInitParams PGMQBroker a =
       PGMQBrokerInitParams PSQL.ConnectInfo PGMQ.VisibilityTimeout
     | PGMQBrokerInitConnStr BS.ByteString PGMQ.VisibilityTimeout

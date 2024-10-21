@@ -56,7 +56,7 @@ instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
     deriving (Show)
   data Message RedisBroker a = RedisM a
   data MessageId RedisBroker = RedisMid Int
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
   data BrokerInitParams RedisBroker a = RedisBrokerInitParams Redis.ConnectInfo
 
   messageId (RedisBM (RedisWithMsgId { rmidId })) = RedisMid rmidId
