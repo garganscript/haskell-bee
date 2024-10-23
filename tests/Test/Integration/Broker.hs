@@ -122,6 +122,36 @@ brokerTests bInitParams =
                 Just msg `shouldBe` (BT.toA . BT.getMessage <$> msgArchive)
                 ) iter
 
+    it "returns the same size of pending messages as 'getQueueSize'" $ \(TestEnv { broker, queue }) -> do
+      let numSteps = 20 :: Int
+      let iter = [1..numSteps] :: [Int]  -- number of steps
+      mapM_ (\i -> do
+                -- Generate random strings and make sure that the
+                -- message ids we get from sendMessage match our data
+                text <- randomString (onlyAlphaNum randomASCII) 20
+                let msg = Message { text }
+                msgId <- BT.sendMessage broker queue (BT.toMessage msg)
+                qs <- BT.getQueueSize broker queue
+                qs `shouldBe` i
+                msgIds <- BT.listPendingMessageIds broker queue
+                length msgIds `shouldBe` qs
+                msgIds `shouldSatisfy` (elem msgId)
+                ) iter
+
+      msgIds <- BT.listPendingMessageIds broker queue
+      let timeoutS = 10  -- some large enough value
+
+      -- after message timeout is set, it shouldn't be counted
+      mapM_ (\msgId -> do
+                BT.setMessageTimeout broker queue msgId timeoutS
+                msgIds' <- BT.listPendingMessageIds broker queue
+                msgIds' `shouldSatisfy` (not . elem msgId)
+                ) msgIds
+
+      -- queue should be "empty" since all messages are timed out
+      qs <- BT.getQueueSize broker queue
+      qs `shouldBe` 0
+
 
 pgmqBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker Message)
 pgmqBrokerInitParams = do

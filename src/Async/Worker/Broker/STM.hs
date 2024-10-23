@@ -146,11 +146,8 @@ instance (Show a) => MessageBroker STMBroker a where
                 Just el'' -> \am -> Just (Map.insert msgId el'' $ fromMaybe Map.empty am)
           modifyTVar archiveMap $ Map.alter f queue
 
-  getQueueSize (STMBroker' { stmMap }) queue = do
-    um <- getUnixTime
-    atomically $ do
-      map' <- readTVar stmMap
-      pure $ length $ Map.filter (\s -> stmidInvisibleUntil s <= um) $ fromMaybe Map.empty $ Map.lookup queue map'
+  getQueueSize broker queue = do
+    length <$> filterAvailableMessages broker queue
 
   getArchivedMessage (STMBroker' { archiveMap }) queue (STMMid msgId) = do
     -- m' <- readTVarIO archiveMap
@@ -162,7 +159,18 @@ instance (Show a) => MessageBroker STMBroker a where
         Just qm ->
           pure $ STMBM <$> (Map.lookup msgId qm)
 
+  listPendingMessageIds broker queue = do
+    msgIds <- Map.keys <$> filterAvailableMessages broker queue
+    pure $ STMMid <$> msgIds
 
+
+filterAvailableMessages :: Broker STMBroker a -> Queue -> IO (Map.Map Int (STMWithMsgId a))
+filterAvailableMessages (STMBroker' { stmMap }) queue = do
+    um <- getUnixTime
+    atomically $ do
+      map' <- readTVar stmMap
+      pure $ Map.filter (\s -> stmidInvisibleUntil s <= um) $ fromMaybe Map.empty $ Map.lookup queue map'
+      
 -- | Helper datatype to store message with a unique id.
 -- We fetch the id by using 'INCR'
 -- https://redis.io/docs/latest/commands/incr/

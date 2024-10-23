@@ -40,6 +40,7 @@ import Data.Aeson qualified as Aeson
 import Data.Aeson (FromJSON(..), ToJSON(..), (.:), (.=), withObject, object, withScientific)
 import Data.ByteString.Char8 qualified as BS
 import Data.ByteString.Lazy qualified as BSL
+import Data.Maybe (catMaybes)
 import Data.Scientific (floatingOrInteger)
 import Database.Redis qualified as Redis
 
@@ -159,6 +160,7 @@ instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
     --     -- OK so the queue might not have the id, we just add it to archive to make sure
     --     void $ Redis.runRedis conn $ Redis.sadd archiveK [idToBS msgId]
 
+  -- TODO This is incorrect: we should include message timeout in this count
   getQueueSize (RedisBroker' { conn }) queue = do
     let queueK = queueKey queue
     -- eLen <- Redis.runRedis conn $ Redis.scard queueK
@@ -175,6 +177,12 @@ instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
         getRedisMessage b queue msgId
       _ -> return Nothing
 
+  listPendingMessageIds (RedisBroker' { conn }) queue = do
+    let queueK = queueKey queue
+    eMsgIds <- Redis.runRedis conn $ Redis.lrange queueK 0 (-1)
+    case eMsgIds of
+      Left _ -> return []
+      Right msgIds -> return $ catMaybes (bsToId <$> msgIds)
 
 -- Helper functions for getting redis keys
 

@@ -163,3 +163,6 @@ class (
 
   {-| Read archived message -}
   getArchivedMessage :: Broker b a -> Queue -> MessageId b -> IO (Maybe (BrokerMessage b a))
+
+  {-| List all pending message ids -}
+  listPendingMessageIds :: Broker b a -> Queue -> IO [MessageId b]
