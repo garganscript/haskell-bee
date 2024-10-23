@@ -184,6 +184,9 @@ instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
       Left _ -> return []
       Right msgIds -> return $ catMaybes (bsToId <$> msgIds)
 
+  getMessageById b queue msgId = do
+    getRedisMessage b queue msgId
+
 -- Helper functions for getting redis keys
 
 -- | Redis counter is an 'Int', while sets can only store strings
@@ -223,7 +226,7 @@ archiveKey queue = BS.pack $ beePrefix <> "archive-" <> renderQueue queue
               
 
 getRedisMessage :: FromJSON a
-               => Broker RedisBroker a
+                => Broker RedisBroker a
                 -> Queue
                 -> MessageId RedisBroker
                 -> IO (Maybe (BrokerMessage RedisBroker a))

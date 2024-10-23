@@ -152,6 +152,13 @@ brokerTests bInitParams =
       qs <- BT.getQueueSize broker queue
       qs `shouldBe` 0
 
+    it "can get message by it's id (from queue)" $ \(TestEnv { broker, queue }) -> do
+      text <- randomString (onlyAlphaNum randomASCII) 20
+      let msg = Message { text }
+      msgId <- BT.sendMessage broker queue (BT.toMessage msg)
+      mMsg <- BT.getMessageById broker queue msgId
+      (BT.toA . BT.getMessage <$> mMsg) `shouldBe` (Just msg)
+
 
 pgmqBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker Message)
 pgmqBrokerInitParams = do

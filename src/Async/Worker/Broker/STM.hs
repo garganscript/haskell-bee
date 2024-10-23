@@ -163,6 +163,14 @@ instance (Show a) => MessageBroker STMBroker a where
     msgIds <- Map.keys <$> filterAvailableMessages broker queue
     pure $ STMMid <$> msgIds
 
+  getMessageById (STMBroker' { stmMap }) queue (STMMid msgId) = do
+    atomically $ do
+      map' <- readTVar stmMap
+      case Map.lookup queue map' of
+        Nothing -> pure Nothing
+        Just qm ->
+          pure $ STMBM <$> (Map.lookup msgId qm)
+
 
 filterAvailableMessages :: Broker STMBroker a -> Queue -> IO (Map.Map Int (STMWithMsgId a))
 filterAvailableMessages (STMBroker' { stmMap }) queue = do

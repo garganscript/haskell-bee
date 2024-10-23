@@ -137,6 +137,9 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     msgIds <- PGMQ.queueAvailableIds conn queue
     pure $ PGMQMid <$> msgIds
 
+  getMessageById (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
+    mMsg <- PGMQ.readMessageById conn queue msgId
+    pure $ PGMQBM <$> mMsg
 
 
 instance ToJSON (MessageId PGMQBroker) where

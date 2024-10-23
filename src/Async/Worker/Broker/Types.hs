@@ -166,3 +166,6 @@ class (
 
   {-| List all pending message ids -}
   listPendingMessageIds :: Broker b a -> Queue -> IO [MessageId b]
+
+  {-| Get message by it's id -}
+  getMessageById :: Broker b a -> Queue -> MessageId b -> IO (Maybe (BrokerMessage b a))
