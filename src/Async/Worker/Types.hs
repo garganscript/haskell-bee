@@ -38,6 +38,7 @@ module Async.Worker.Types
   , PerformAction
   -- * Events emitted during job lifetime
   , WorkerJobEvent
+  , WorkerJobErrorEvent
   , WorkerMJobEvent
   -- * Other useful types and functions
   , HasWorkerBroker
@@ -47,7 +48,7 @@ where
 
 import Async.Worker.Broker.Types (Broker, BrokerMessage, MessageBroker, Queue)
 import Control.Applicative ((<|>))
-import Control.Exception.Safe (Exception)
+import Control.Exception.Safe (Exception, SomeException)
 import Data.Aeson (FromJSON(..), ToJSON(..), object, (.=), (.:), withObject, withText)
 import Data.Text qualified as T
 import Data.Typeable (Typeable)
@@ -256,7 +257,7 @@ data State b a =
         -- | Event emitted after job timed out
         , onJobTimeout      :: WorkerJobEvent b a
         -- | Event emitted after job ended with error
-        , onJobError        :: WorkerJobEvent b a
+        , onJobError        :: WorkerJobErrorEvent b a
         -- | Event emitted when worker is safely killed (don't overuse it)
         , onWorkerKilledSafely :: WorkerMJobEvent b a }
 
@@ -266,6 +267,7 @@ runAction :: State b a -> BrokerMessage b (Job a) -> IO ()
 runAction state brokerMessage = (performAction state) state brokerMessage
 
 type WorkerJobEvent b a = Maybe (State b a -> BrokerMessage b (Job a) -> IO ())
+type WorkerJobErrorEvent b a = Maybe (State b a -> BrokerMessage b (Job a) -> SomeException -> IO ())
 type WorkerMJobEvent b a = Maybe (State b a -> Maybe (BrokerMessage b (Job a)) -> IO ())
 
 -- | Callback definition (what to execute when a message arrives)

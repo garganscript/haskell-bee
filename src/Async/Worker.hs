@@ -111,7 +111,7 @@ runSingle' state@(State { .. }) = do
             mBrokerMessage <- readTVarIO mBrokerMessageTVar
             case mBrokerMessage of
               Just brokerMessage -> do
-                callWorkerJobEvent onJobError state brokerMessage
+                callWorkerJobErrorEvent onJobError state brokerMessage err
                 handleJobError state brokerMessage
               Nothing -> handleUnknownError state err
         ]
@@ -171,6 +171,14 @@ callWorkerJobEvent :: WorkerJobEvent b a
                    -> IO ()
 callWorkerJobEvent Nothing _ _ = pure ()
 callWorkerJobEvent (Just event) state brokerMessage = event state brokerMessage
+
+callWorkerJobErrorEvent :: WorkerJobErrorEvent b a
+                        -> State b a
+                        -> BrokerMessage b (Job a)
+                        -> SomeException
+                        -> IO ()
+callWorkerJobErrorEvent Nothing _ _ _ = pure ()
+callWorkerJobErrorEvent (Just event) state brokerMessage err = event state brokerMessage err
 
 callWorkerMJobEvent :: WorkerMJobEvent b a
                     -> State b a

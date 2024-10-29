@@ -136,7 +136,7 @@ initState bInitParams events queue workerName = do
                     , onMessageReceived = Just (pushEvt EMessageReceived)
                     , onJobFinish = Just (pushEvt EJobFinished)
                     , onJobTimeout = Just (pushEvt EJobTimeout)
-                    , onJobError = Just (pushEvt EJobError)
+                    , onJobError = Just (\_s bm _exc -> pushEvent events EJobError bm)
                     , onWorkerKilledSafely = Just (const $ pushEventMMsg events EWorkerKilledSafely) }
 
   threadId <- forkIO $ run state
