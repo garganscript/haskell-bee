@@ -124,14 +124,13 @@ handleMessage state@(State { .. }) brokerMessage = do
   let job' = toA msg
   -- putStrLn $ formatStr state $ "received job: " <> show (job job')
   let mdata = metadata job'
-  let t = jobTimeout job'
-  let timeoutS = t * microsecond
+  let timeoutS = jobTimeout job'
   -- Inform the broker how long a task could take. This way we prevent
   -- the broker from sending this task to another worker (e.g. 'vt' in
   -- PGMQ).
   setMessageTimeout broker queueName msgId (TimeoutS timeoutS)
   -- mTimeout <- Timeout.timeout timeoutS (wrapPerformActionInJobException state brokerMessage)
-  mTimeout <- Timeout.timeout timeoutS (runAction state brokerMessage)
+  mTimeout <- Timeout.timeout (timeoutS * microsecond) (runAction state brokerMessage)
 
   let archiveHandler = do
         case archiveStrategy mdata of
@@ -147,7 +146,7 @@ handleMessage state@(State { .. }) brokerMessage = do
     Nothing -> do
       callWorkerJobEvent onJobTimeout state brokerMessage
       throwIO $ JobTimeout { jtBMessage = brokerMessage
-                           , jtTimeout = t }
+                           , jtTimeout = timeoutS }
   -- onMessageFetched broker queue msg
 
 
