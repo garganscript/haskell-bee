@@ -94,6 +94,7 @@ runSingle' state@(State { .. }) = do
               when (resendWhenWorkerKilled mdata) $ do
                 -- putStrLn $ formatStr state $ "resending job: " <> show job
                 void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
+                void $ deleteMessage broker queueName $ messageId brokerMessage
                 -- size <- getQueueSize broker queueName
                 -- putStrLn $ formatStr state $ "queue size: " <> show size
                 
