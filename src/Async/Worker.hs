@@ -93,8 +93,12 @@ runSingle' state@(State { .. }) = do
               -- Should we resend this message?
               when (resendWhenWorkerKilled mdata) $ do
                 -- putStrLn $ formatStr state $ "resending job: " <> show job
-                void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
+                
+                -- NOTE: Delete first, then create job. It's a bit
+                -- safer (same job won't be picked up twice, though we
+                -- should be safe anyways, with the timeout)
                 void $ deleteMessage broker queueName $ messageId brokerMessage
+                void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
                 -- size <- getQueueSize broker queueName
                 -- putStrLn $ formatStr state $ "queue size: " <> show size
                 
