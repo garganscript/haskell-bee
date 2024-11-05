@@ -110,8 +110,11 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   setMessageTimeout (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) (TimeoutS timeoutS) =
     PGMQ.setMessageVt conn queue msgId timeoutS
 
-  sendMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQM message) = do
-    PGMQMid <$> PGMQ.safeSendMessage conn queue message 0
+  sendMessage b queue message = do
+    sendMessageDelayed b queue message (TimeoutS 0)
+
+  sendMessageDelayed (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQM message) (TimeoutS t) = do
+    PGMQMid <$> PGMQ.safeSendMessage conn queue message t
 
   deleteMessage (PGMQBroker' { conn }) (renderQueue -> queue) (PGMQMid msgId) = do
     PGMQ.deleteMessage conn queue msgId

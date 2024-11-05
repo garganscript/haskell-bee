@@ -256,8 +256,12 @@ handleUnknownError :: State b a -> SomeException -> IO ()
 handleUnknownError state err = putStrLn $ formatStr state $ "unknown error: " <> show err
 
 sendJob :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a -> IO (MessageId b)
-sendJob broker queueName job = do
-  sendMessage broker queueName $ toMessage job
+sendJob broker queueName job =
+  sendJobDelayed broker queueName job 0
+
+sendJobDelayed :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a -> TimeoutS -> IO (MessageId b)
+sendJobDelayed broker queueName job timeoutS = do
+  sendMessageDelayed broker queueName (toMessage job) timeoutS
 
 microsecond :: Int
 microsecond = 10^(6 :: Int)
@@ -273,7 +277,7 @@ data SendJob b a =
   SendJob { broker       :: Broker b (Job a)
           , queue        :: Queue
           , msg          :: a
-          -- , delay     :: Delay
+          , delay        :: TimeoutS  -- initial delay for the message
           , archStrat    :: ArchiveStrategy
           , errStrat     :: ErrorStrategy
           , toStrat      :: TimeoutStrategy
@@ -290,7 +294,7 @@ mkDefaultSendJob broker queue msg timeout =
   SendJob { broker
           , queue
           , msg
-          -- , delay = 0
+          , delay = 0
           -- | remove finished jobs
           , archStrat = ASDelete
           -- | archive errored jobs (for inspection later)
@@ -320,4 +324,4 @@ sendJob' (SendJob { .. }) = do
                                  , timeout = timeout
                                  , resendWhenWorkerKilled = resendOnKill }
   let job = Job { job = msg, metadata }
-  sendJob broker queue job
+  sendJobDelayed broker queue job delay

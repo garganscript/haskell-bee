@@ -21,7 +21,7 @@ module Async.Worker.Broker.STM
   , STMWithMsgId(..) )
 where
 
-import Async.Worker.Broker.Types (MessageBroker(..), Queue, _TimeoutS)
+import Async.Worker.Broker.Types (MessageBroker(..), Queue, TimeoutS(..))
 import Control.Concurrent (threadDelay)
 import Control.Monad.STM (atomically)
 import Control.Concurrent.STM.TVar
@@ -111,12 +111,15 @@ instance (Show a) => MessageBroker STMBroker a where
   --           Nothing -> undefined
   --           Just q -> do
 
-  sendMessage (STMBroker' { stmMap, counter }) queue (STMM message) = do
+  sendMessage b queue message = sendMessageDelayed b queue message (TimeoutS 0)
+
+  sendMessageDelayed (STMBroker' { stmMap, counter }) queue (STMM message) (TimeoutS t) = do
     id' <- atomically $ do
       modifyTVar counter (+1)
       readTVar counter
     let msgId = STMMid id'
-    ut <- getUnixTime
+    ut' <- getUnixTime
+    let ut = ut' { utSeconds = utSeconds ut' + fromIntegral t }
     let m = STMWithMsgId { stmidId = id', stmida = message, stmidInvisibleUntil = ut }
     let f x = case x of
           Nothing -> Just $ Map.singleton id' m

@@ -152,6 +152,9 @@ class (
   {-| Send message -}
   sendMessage :: Broker b a -> Queue -> Message b a -> IO (MessageId b)
 
+  {-| Send message with initial delay -}
+  sendMessageDelayed :: Broker b a -> Queue -> Message b a -> TimeoutS -> IO (MessageId b)
+
   {-| Delete message -}
   deleteMessage :: Broker b a -> Queue -> MessageId b -> IO ()
 

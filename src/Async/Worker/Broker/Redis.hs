@@ -136,6 +136,9 @@ instance (SerializableMessage a, Show a) => MessageBroker RedisBroker a where
           Redis.lpush queueK [idToBS msgId]
         return msgId
 
+  -- | TODO Not implemented
+  sendMessageDelayed b queue message _t = sendMessage b queue message
+
   -- deleteMessage (RedisBroker' { conn }) queue (RedisMid msgId) = do
   deleteMessage (RedisBroker' { conn }) queue msgId = do
     let queueK = queueKey queue
