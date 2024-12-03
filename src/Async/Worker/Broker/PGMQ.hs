@@ -44,10 +44,10 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
         conn :: PSQL.Connection
       , defaultVt :: PGMQ.VisibilityTimeout
       }
-  data BrokerMessage PGMQBroker a = PGMQBM (PGMQ.Message a)
+  newtype BrokerMessage PGMQBroker a = PGMQBM (PGMQ.Message a)
     deriving (Show)
-  data Message PGMQBroker a = PGMQM a
-  data MessageId PGMQBroker = PGMQMid Int
+  newtype Message PGMQBroker a = PGMQM a
+  newtype MessageId PGMQBroker = PGMQMid Int
     deriving (Eq, Show, Ord, Generic)
   data BrokerInitParams PGMQBroker a =
       PGMQBrokerInitParams PSQL.ConnectInfo PGMQ.VisibilityTimeout
