@@ -1,3 +1,7 @@
+{-# LANGUAGE DeriveAnyClass     #-}
+{-# LANGUAGE DeriveGeneric      #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-|
 Module      : Async.Worker.Broker.PGMQ
 Description : PGMQ broker implementation
@@ -23,13 +27,14 @@ import Async.Worker.Broker.Types (MessageBroker(..), SerializableMessage, render
 import Data.ByteString qualified as BS
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.MVar (withMVar)
+import Control.DeepSeq
 import Data.Aeson (FromJSON(..), ToJSON(..), withScientific)
 import Data.Scientific (floatingOrInteger)
 import Database.PostgreSQL.LibPQ qualified as LibPQ
 import Database.PostgreSQL.Simple qualified as PSQL
 import Database.PostgreSQL.Simple.Internal qualified as PSQLInternal
 import Database.PGMQ qualified as PGMQ
-
+import GHC.Generics
 
 data PGMQBroker
 
@@ -43,7 +48,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     deriving (Show)
   data Message PGMQBroker a = PGMQM a
   data MessageId PGMQBroker = PGMQMid Int
-    deriving (Eq, Show, Ord)
+    deriving (Eq, Show, Ord, Generic)
   data BrokerInitParams PGMQBroker a =
       PGMQBrokerInitParams PSQL.ConnectInfo PGMQ.VisibilityTimeout
     | PGMQBrokerInitConnStr BS.ByteString PGMQ.VisibilityTimeout
@@ -144,6 +149,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
     mMsg <- PGMQ.readMessageById conn queue msgId
     pure $ PGMQBM <$> mMsg
 
+deriving anyclass instance NFData (MessageId PGMQBroker)
 
 instance ToJSON (MessageId PGMQBroker) where
   toJSON (PGMQMid i) = toJSON i
