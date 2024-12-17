@@ -87,7 +87,7 @@ integration-tests-pgmq:
 
 
 
-integration-tests-pgmq:
+integration-tests-redis:
   stage: integration-tests
   image: haskell:9.4.8-slim
   services:
