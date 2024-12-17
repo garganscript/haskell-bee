@@ -11,17 +11,13 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Test.Integration.Worker
- ( workerTests
- , multiWorkerTests
- , pgmqWorkerBrokerInitParams
- , redisWorkerBrokerInitParams
- , stmWorkerBrokerInitParams )
+ ( Message(..)
+ 
+ , workerTests
+ , multiWorkerTests )
 where
 
 import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat, resendOnKill, KillWorkerSafely(..))
-import Async.Worker.Broker.PGMQ qualified as PGMQ
-import Async.Worker.Broker.Redis qualified as Redis
-import Async.Worker.Broker.STM qualified as STMB
 import Async.Worker.Broker.Types qualified as BT
 import Async.Worker.Types
 import Control.Concurrent (forkIO, killThread, threadDelay, ThreadId, throwTo)
@@ -35,7 +31,7 @@ import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
 import Test.Hspec
-import Test.Integration.Utils (defaultPGMQVt, getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil, waitUntilTVarEq, waitUntilTVarPred, waitUntil, waitUntilQueueEmpty)
+import Test.Integration.Utils (randomQueueName, waitUntil, waitUntilTVarEq, waitUntilTVarPred, waitUntil, waitUntilQueueEmpty)
 
 
 data TestEnv b =
@@ -553,19 +549,3 @@ second = 1000 * millisecond
 
 millisecond :: Int
 millisecond = 1000
-
-
-pgmqWorkerBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker (Job Message))
-pgmqWorkerBrokerInitParams = do
-  conn <- getPSQLEnvConnectInfo
-  return $ PGMQ.PGMQBrokerInitParams conn defaultPGMQVt
-
-redisWorkerBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker (Job Message))
-redisWorkerBrokerInitParams = do
-  Redis.RedisBrokerInitParams <$> getRedisEnvConnectInfo
-
-stmWorkerBrokerInitParams :: IO (BT.BrokerInitParams STMB.STMBroker (Job Message))
-stmWorkerBrokerInitParams = do
-  archiveMap <- newTVarIO Map.empty
-  stmMap <- newTVarIO Map.empty
-  pure $  STMB.STMBrokerInitParams { .. }

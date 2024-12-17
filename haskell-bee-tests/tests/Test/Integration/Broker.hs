@@ -7,24 +7,18 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Test.Integration.Broker
- ( brokerTests
- , pgmqBrokerInitParams
- , redisBrokerInitParams
- , stmBrokerInitParams )
+ ( Message(..)
+ 
+ , brokerTests )
 where
 
-import Async.Worker.Broker.PGMQ qualified as PGMQ
-import Async.Worker.Broker.Redis qualified as Redis
-import Async.Worker.Broker.STM qualified as STMB
 import Async.Worker.Broker.Types qualified as BT
-import Control.Concurrent.STM.TVar (newTVarIO)
 import Control.Exception (bracket)
 import Data.Aeson (ToJSON(..), FromJSON(..), withText)
-import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
 import Data.Text qualified as T
 import Test.Hspec
-import Test.Integration.Utils (defaultPGMQVt, getPSQLEnvConnectInfo, getRedisEnvConnectInfo, randomQueueName, waitUntil)
+import Test.Integration.Utils (randomQueueName, waitUntil)
 import Test.RandomStrings (randomASCII, randomString, onlyAlphaNum)
 
 
@@ -158,19 +152,3 @@ brokerTests bInitParams =
       msgId <- BT.sendMessage broker queue (BT.toMessage msg)
       mMsg <- BT.getMessageById broker queue msgId
       (BT.toA . BT.getMessage <$> mMsg) `shouldBe` (Just msg)
-
-
-pgmqBrokerInitParams :: IO (BT.BrokerInitParams PGMQ.PGMQBroker Message)
-pgmqBrokerInitParams = do
-  conn <- getPSQLEnvConnectInfo
-  return $ PGMQ.PGMQBrokerInitParams conn defaultPGMQVt
-
-redisBrokerInitParams :: IO (BT.BrokerInitParams Redis.RedisBroker Message)
-redisBrokerInitParams = do
-  Redis.RedisBrokerInitParams <$> getRedisEnvConnectInfo
-
-stmBrokerInitParams :: IO (BT.BrokerInitParams STMB.STMBroker Message)
-stmBrokerInitParams = do
-  archiveMap <- newTVarIO Map.empty
-  stmMap <- newTVarIO Map.empty
-  pure $ STMB.STMBrokerInitParams { .. }

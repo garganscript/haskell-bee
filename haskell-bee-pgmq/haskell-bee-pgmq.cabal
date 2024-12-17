@@ -11,7 +11,7 @@ cabal-version:      3.4
 --   http://haskell.org/cabal/users-guide/
 --
 -- The name of the package.
-name:               haskell-bee
+name:               haskell-bee-pgmq
 
 -- The package version.
 -- See the Haskell package versioning policy (PVP) for standards
@@ -35,7 +35,7 @@ homepage:           https://gitlab.iscpif.fr/gargantext/haskell-bee
 license:            AGPL-3.0-or-later
 
 -- The file containing the license text.
-license-file:       LICENSE
+license-file:       ../LICENSE
 
 -- The package author(s).
 author:             Gargantext
@@ -63,13 +63,7 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  Async.Worker
-                    , Async.Worker.Broker
-                    , Async.Worker.Broker.PGMQ
-                    , Async.Worker.Broker.Redis
-                    , Async.Worker.Broker.STM
-                    , Async.Worker.Broker.Types
-                    , Async.Worker.Types
+    exposed-modules:  Async.Worker.Broker.PGMQ
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -84,8 +78,6 @@ library
                     , containers >= 0.6.7 && < 0.8
                     , deepseq >= 1.0.0.0 && < 1.7
                     , haskell-pgmq >= 0.1.0.0 && < 0.2
-                    , hedis >= 0.15.2 && < 0.16
-                    , mtl >= 2.2 && < 2.4
                     , postgresql-libpq >= 0.10 && < 0.11
                     , postgresql-simple >= 0.6 && < 0.8
                     , safe >= 0.3 && < 0.4
@@ -96,6 +88,9 @@ library
                     , time >= 1.10 && < 1.15
                     , units >= 2.4 && < 2.5
                     , unix-time >= 0.4.11 && < 0.5
+
+
+                    , haskell-bee
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -124,6 +119,7 @@ executable simple-worker
                     , text >= 1.2 && < 2.2
                     
                     , haskell-bee
+                    , haskell-bee-pgmq
 
     -- Directories containing source files.
     hs-source-dirs:   bin/simple-worker
@@ -142,52 +138,17 @@ executable simple-worker
 
     ghc-options: -threaded
 
-test-suite test-unit
-    -- Import common warning flags.
-    import:           warnings
-    
-    type:             exitcode-stdio-1.0
-    
-    build-depends:    base ^>=4.17.2.0
-                    , aeson >= 2.1 && < 2.3
-                    , tasty >= 1.5 && < 1.6
-                    , tasty-hunit >= 0.10 && < 0.11
-                    , tasty-quickcheck >= 0.10 && < 0.12
-                    , unix-time >= 0.4.11 && < 0.5
-                    
-                    , haskell-bee
-
-    -- Directories containing source files.
-    hs-source-dirs:   tests
-    main-is: unit-tests.hs
-
-    -- Base language which the package is written in.
-    default-language: Haskell2010
-
-    default-extensions:
-      DuplicateRecordFields
-      GeneralizedNewtypeDeriving
-      ImportQualifiedPost
-      NamedFieldPuns
-      OverloadedStrings
-      RecordWildCards
-
-    ghc-options: -threaded
-
-test-suite test-integration
+test-suite pgmq-test-integration
     -- Import common warning flags.
     import:           warnings
     
     type:             exitcode-stdio-1.0
 
-    other-modules:  Test.Integration.Broker
-                  , Test.Integration.Utils
-                  , Test.Integration.Worker
+    other-modules:  Test.Integration.PGMQ
         
     build-depends:    base ^>=4.17.2.0
                     , aeson >= 2.1 && < 2.3
                     , containers >= 0.6 && < 0.8
-                    , hedis >= 0.15.2 && < 0.16
                     , hspec >= 2.11 && < 3
                     , postgresql-simple >= 0.6 && < 0.8
                     , random-strings == 0.1.1.0
@@ -197,6 +158,8 @@ test-suite test-integration
                     , text >= 1.2 && < 2.2
                     
                     , haskell-bee
+                    , haskell-bee-tests
+                    , haskell-bee-pgmq
 
     -- Directories containing source files.
     hs-source-dirs:   tests
