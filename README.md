@@ -9,14 +9,20 @@ You can think of it as a simple Haskell rewrite of [Celery](https://docs.celeryq
 ## Design
 
 The high-level picture is that we have 2 components:
-- **broker** - which is an abstraction over some queueing system (e.g. [pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq) or redis)
-- **worker** - which takes a **broker** definition and adds a job system on top of it
+- **broker** - which is an abstraction over some queueing system
+  (e.g. [pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq) or
+  redis)
+- **worker** - which takes a **broker** definition and adds a job
+  system on top of it
 
 ### Broker
 
-The library so far contains 2 implementations for brokers:
-- **pgmq** - which is based on [haskell-pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq)
-- **redis** - which is a very simple `LPUSH`-based queue (c.f. https://redis.io/glossary/redis-queue/)
+The library so far contains 3 implementations for brokers:
+- [**pgmq**](./haskell-bee-pgmq) - which is based on
+  [haskell-pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq)
+- [**redis**](./haskell-bee-redis) - which is a very simple `LPUSH`-based queue
+  (c.f. https://redis.io/glossary/redis-queue/)
+- [**STM**](./haskell-bee-stm) - which uses the `STM`, could be useful for testing
 
 The broker definition uses some more advanced GHC type extensions
 (in particular, [type families](https://wiki.haskell.org/GHC/Type_families))
@@ -47,8 +53,9 @@ podman run --rm -it -p 6379:6379 redis:latest
 ```
 Then run tests:
 ```shell
-cabal v2-test --test-show-details=streaming
+cabal v2-test haskell-bee-pgmq --test-show-details=streaming
 ```
+Tests are generic, they are bundled as a library in [`haskell-bee-tests`](./haskell-bee-tests).
 
 ## Other work
 
@@ -89,4 +96,3 @@ any job metadata structure like in haskell-bee. They fall into the
 All credit goes to the [Gargantext
 team](https://www.gargantext.org/). This work was done as part of my
 contract there.
-
