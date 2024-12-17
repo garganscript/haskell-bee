@@ -12,7 +12,7 @@ stages:
 
 build:
   stage: build
-  image: haskell:9.4.7-slim
+  image: haskell:9.4.8-slim
   # https://stackoverflow.com/questions/76340763/what-gitlab-ci-configuration-will-reliably-cache-haskell-package-dependencies-bu
   cache:
     key: "v0-cabal"
@@ -27,11 +27,11 @@ build:
     - apt-get update -qq && apt-get install -y -qq libpq-dev
     - cabal update
   script:
-    - cabal v2-build
+    - cabal v2-build all
 
 unit-tests:
   stage: unit-tests
-  image: haskell:9.4.7-slim
+  image: haskell:9.4.8-slim
   # https://stackoverflow.com/questions/76340763/what-gitlab-ci-configuration-will-reliably-cache-haskell-package-dependencies-bu
   cache:
     key: "v0-cabal"
@@ -47,16 +47,18 @@ unit-tests:
     - cabal update
   script:
     #- cabal v2-test test-pgmq-unit
-    - cabal v2-run test-unit -- +RTS -N -RTS
+    - cabal v2-run haskell-bee:test-unit -- +RTS -N -RTS
+    - cabal v2-run haskell-bee-redis:redis-test-unit -- +RTS -N -RTS
+    - cabal v2-run haskell-bee-stm:stm-test-unit -- +RTS -N -RTS
 
-integration-tests:
+integration-tests-pgmq:
   stage: integration-tests
-  image: haskell:9.4.7-slim
+  image: haskell:9.4.8-slim
   services:
     - name: docker.io/cgenie/pgmq:16-1.3.3.1
       alias: pgmq
-    - name: docker.io/redis:7.2
-      alias: redis
+    #- name: docker.io/redis:7.2
+    #  alias: redis
   variables:
     # https://stackoverflow.com/questions/77173109/error-link-is-not-supported-in-gitlab-ci-cd-pipeline-when-executing-an-image-as
     FF_NETWORK_PER_BUILD: 1
@@ -82,4 +84,4 @@ integration-tests:
     - export REDIS_HOST=redis
     #- cabal v2-test test-pgmq-integration
     # cabal v2-test -j seems not to work correctly, so we just run the integration test
-    - cabal v2-run test-integration -- +RTS -N -RTS
+    - cabal v2-run haskell-bee-pgmq:pgmq-test-integration -- +RTS -N -RTS
