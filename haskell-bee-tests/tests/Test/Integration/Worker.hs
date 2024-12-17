@@ -26,7 +26,6 @@ import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, TVar, modifyTVar)
 import Control.Exception (bracket, Exception, throwIO)
 import Control.Monad (void)
 import Data.Aeson (ToJSON, FromJSON)
-import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
@@ -298,7 +297,8 @@ workerTests brokerInitParams =
       let job = (mkDefaultSendJob broker queueName msg 1) { toStrat = TSRepeat }
       void $ sendJob' job
  
-      waitUntilTVarEq events [ EMessageReceived msg, EJobTimeout msg ] 2500
+      waitUntilTVarPred events (\evts -> ((EMessageReceived msg) `elem` evts)
+                                      && ((EJobTimeout msg) `elem` evts)) 2500
 
       -- NOTE It doesn't make sense to check queue size here, the
       -- worker just continues to run the errored task in background
