@@ -81,10 +81,39 @@ integration-tests-pgmq:
     - cabal update
   script:
     - export POSTGRES_HOST=pgmq
-    - export REDIS_HOST=redis
     #- cabal v2-test test-pgmq-integration
     # cabal v2-test -j seems not to work correctly, so we just run the integration test
     - cabal v2-run haskell-bee-pgmq:pgmq-test-integration -- +RTS -N -RTS
+
+
+
+integration-tests-pgmq:
+  stage: integration-tests
+  image: haskell:9.4.8-slim
+  services:
+    - name: docker.io/redis:7.2
+      alias: redis
+  variables:
+    # https://stackoverflow.com/questions/77173109/error-link-is-not-supported-in-gitlab-ci-cd-pipeline-when-executing-an-image-as
+    FF_NETWORK_PER_BUILD: 1
+    REDIS_HOST: redis
+  # https://stackoverflow.com/questions/76340763/what-gitlab-ci-configuration-will-reliably-cache-haskell-package-dependencies-bu
+  cache:
+    key: "v0-cabal"
+    paths:
+      - ".cabal"
+  before_script:
+    - |
+      cat >cabal.project.local <<EOF
+      store-dir: $CI_PROJECT_DIR/.cabal
+      remote-repo-cache: $CI_PROJECT_DIR/.cabal/packages
+      EOF  
+    - apt-get update -qq && apt-get install -y -qq libpq-dev
+    - cabal update
+  script:
+    #- cabal v2-test test-pgmq-integration
+    # cabal v2-test -j seems not to work correctly, so we just run the integration test
+    - cabal v2-run haskell-bee-redis:redis-test-integration -- +RTS -N -RTS
 
 
 integration-tests-stm:
