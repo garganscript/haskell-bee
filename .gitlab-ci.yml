@@ -86,7 +86,6 @@ integration-tests-pgmq:
     - cabal v2-run haskell-bee-pgmq:pgmq-test-integration -- +RTS -N -RTS
 
 
-
 integration-tests-redis:
   stage: integration-tests
   image: haskell:9.4.8-slim

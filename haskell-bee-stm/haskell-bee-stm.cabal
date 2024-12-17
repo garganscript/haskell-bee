@@ -35,7 +35,7 @@ homepage:           https://gitlab.iscpif.fr/gargantext/haskell-bee
 license:            AGPL-3.0-or-later
 
 -- The file containing the license text.
-license-file:       ../LICENSE
+license-file:       LICENSE
 
 -- The package author(s).
 author:             Gargantext
