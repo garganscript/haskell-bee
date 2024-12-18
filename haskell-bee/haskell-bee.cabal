@@ -77,18 +77,9 @@ library
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.0
                     , aeson >= 2.1 && < 2.3
-                    , bytestring >= 0.11 && < 0.13
-                    , containers >= 0.6.7 && < 0.8
-                    , deepseq >= 1.0.0.0 && < 1.7
-                    , mtl >= 2.2 && < 2.4
-                    , safe >= 0.3 && < 0.4
                     , safe-exceptions >= 0.1.7 && < 0.2
-                    , scientific >= 0.3.7.0 && < 0.4
                     , stm >= 2.5.3 && < 3
                     , text >= 1.2 && < 2.2
-                    , time >= 1.10 && < 1.15
-                    , units >= 2.4 && < 2.5
-                    , unix-time >= 0.4.11 && < 0.5
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -114,9 +105,7 @@ test-suite test-unit
     build-depends:    base ^>=4.17.2.0
                     , aeson >= 2.1 && < 2.3
                     , tasty >= 1.5 && < 1.6
-                    , tasty-hunit >= 0.10 && < 0.11
                     , tasty-quickcheck >= 0.10 && < 0.12
-                    , unix-time >= 0.4.11 && < 0.5
                     
                     , haskell-bee
 
