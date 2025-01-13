@@ -72,6 +72,9 @@ Tests are generic, they are bundled as a library in [`haskell-bee-tests`](./hask
   retrying, re-nicing.
 - [odd-jobs](https://hackage.haskell.org/package/odd-jobs)
   PostgreSQL-backed, has an admin UI, seems mature.
+- [broccoli](https://github.com/densumesh/broccoli)
+  Rust library, a message queue system with configurable brokers.
+  Similar to Celery. Has configurable retry strategies.
 
 ### Brokers
 
