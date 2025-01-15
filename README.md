@@ -29,7 +29,9 @@ The library so far contains 3 implementations for brokers:
 
 The broker definition uses some more advanced GHC type extensions
 (in particular, [type families](https://wiki.haskell.org/GHC/Type_families))
-at the benefit of having one clear interface for what we expect from the broker.
+at the benefit of having
+[one clear interface](./haskell-bee/src/Async/Worker/Broker/Types.hs)
+for what we expect from the broker.
 
 ### Worker
 
