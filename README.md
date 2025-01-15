@@ -52,16 +52,39 @@ This project doesn't provide worker management utilities.
 
 ## Testing
 
-Start postgresql and redis:
+Tests are generic, they are bundled as a library in
+[`haskell-bee-tests`](./haskell-bee-tests).
+
+Each broker implements these generic tests in its own test suite.
+
+### PGMQ
+
+Start postgresql:
 ```shell
 podman run --rm -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres postgres
-podman run --rm -it -p 6379:6379 redis:latest
 ```
 Then run tests:
 ```shell
 cabal v2-test haskell-bee-pgmq --test-show-details=streaming
 ```
-Tests are generic, they are bundled as a library in [`haskell-bee-tests`](./haskell-bee-tests).
+
+### Redis
+
+Start redis:
+```shell
+podman run --rm -it -p 6379:6379 redis:latest
+```
+Then run tests:
+```shell
+cabal v2-test haskell-bee-redis --test-show-details=streaming
+```
+
+### STM
+
+No need to start the broker, just run the tests:
+```shell
+cabal v2-test haskell-bee-stm --test-show-details=streaming
+```
 
 ## Other work
 
