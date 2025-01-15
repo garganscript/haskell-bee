@@ -33,7 +33,7 @@ at the benefit of having one clear interface for what we expect from the broker.
 
 ### Worker
 
-The worker (defined in [`./src/Async/Worker.hs`](./src/Async/Worker.hs)) is completely described by it's `State`.
+The worker (defined in [`./haskell-bee/src/Async/Worker.hs`](./haskell-bee/src/Async/Worker.hs)) is completely described by it's `State`.
 
 `State` contains information such as:
 - broker instance
