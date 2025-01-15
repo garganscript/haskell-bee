@@ -24,15 +24,18 @@ The library so far contains 3 implementations for brokers:
   (c.f. https://redis.io/glossary/redis-queue/)
 - [**STM**](./haskell-bee-stm) - which uses the `STM`, could be useful for testing
 
+`pgmq` broker so far is assumed to be most stable and complete,
+`redis` and `STM` are considered experimental.
+
 The broker definition uses some more advanced GHC type extensions
 (in particular, [type families](https://wiki.haskell.org/GHC/Type_families))
 at the benefit of having one clear interface for what we expect from the broker.
 
 ### Worker
 
-The worker (defined in [`./src/Async/Worker.hs`]) is completely described by it's `State`.
+The worker (defined in [`./src/Async/Worker.hs`](./src/Async/Worker.hs)) is completely described by it's `State`.
 
-This contains information such as:
+`State` contains information such as:
 - broker instance
 - queue name (one worker is assumed to be assigned to a single queue. If you want more queues, just spawn more workers)
 - actions to be performed on incoming data
@@ -43,6 +46,7 @@ This contains information such as:
   - after timeout occurred
   - after job error
 
+This project doesn't provide worker management utilities.
 
 ## Testing
 
