@@ -20,7 +20,10 @@ data Program =
 
 programParser :: ParserInfo Program
 programParser = info
-  ( ( Program <$> global <*> commandParser ) <**> helper ) mempty
+  ( ( Program <$> global <*> commandParser ) <**> helper )
+  ( fullDesc
+   <> header "haskell-bee demo"
+   <> progDesc "Simple demonstration of worker capabilities" )
 
 data GlobalArgs =
   GlobalArgs { _ga_queue :: B.Queue }
@@ -45,14 +48,14 @@ data Command
 
 commandParser :: Parser Command
 commandParser = subparser
-    ( command "worker" (info (worker <**> helper) mempty )
-   <> command "queue-size" (info (queueSize <**> helper) mempty )
+    ( command "worker" (info (worker <**> helper) (progDesc "run worker") )
+   <> command "queue-size" (info (queueSize <**> helper) (progDesc "show queue size") )
 
    -- tasks
-   <> command "echo" (info (echo <**> helper) mempty )
-   <> command "error" (info (error' <**> helper) mempty )
-   <> command "quit" (info (quit <**> helper) mempty )
-   <> command "wait" (info (wait <**> helper) mempty )
+   <> command "echo" (info (echo <**> helper) (progDesc "echo task") )
+   <> command "error" (info (error' <**> helper) (progDesc "error task") )
+   <> command "quit" (info (quit <**> helper) (progDesc "quit task") )
+   <> command "wait" (info (wait <**> helper) (progDesc "wait task") )
     )
 
 data WorkerArgs =

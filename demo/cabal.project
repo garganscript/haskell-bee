@@ -2,9 +2,10 @@ with-compiler: ghc-9.4.8
 
 packages:
         ./
-        ../        
+        ../haskell-bee
+        ../haskell-bee-pgmq
 
 source-repository-package
     type: git
     location: https://gitlab.iscpif.fr/gargantext/haskell-pgmq
-    tag: 0591a643d8ba1776af4fac56c1e4ff5fc3e98bb3
+    tag: 1dd92f0aa8e9f8096064e5656c336e562680f4e3

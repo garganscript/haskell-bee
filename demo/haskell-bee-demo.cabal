@@ -65,6 +65,7 @@ library
                     , aeson >= 2.1 && < 2.3
                     , async >= 2.2 && < 2.3
                     , haskell-bee
+                    , haskell-bee-pgmq
                     , postgresql-simple >= 0.7.0 && < 0.8
                     , safe-exceptions >= 0.1.7 && < 0.2
                     , text >= 2.0 && < 2.2
