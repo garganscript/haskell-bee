@@ -164,7 +164,8 @@ runtime :)
 
 As such, we could probably reimplement the `performAction` function to
 return something (it currently returns `IO ()`) -- simplest thing
-being a JSON-ed string.
+being some JSON value (we avoid too much type mangling at the cost of
+runtime deserialization of that value).
 
 Then, in the `onJobFinish` callback, we could use that return value to
 trigger some other task. It might even be part of an `ArchiveStrategy`
