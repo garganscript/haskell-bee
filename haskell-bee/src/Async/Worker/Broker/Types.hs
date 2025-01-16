@@ -134,9 +134,10 @@ class (
   {-| Drop queue -}
   dropQueue :: Broker b a -> Queue -> IO ()
 
-  {-| Read message from queue, waiting for it if not present (this leaves
-  the message in queue, you need to use 'setMessageTimeout' to prevent
-  other workers from seeing this message). -}
+  {-| Read message from queue, waiting for it if not present (NOTE: for
+  pgmq, this leaves the message in queue, you need to use
+  'setMessageTimeout' to prevent other workers from seeing this
+  message). -}
   readMessageWaiting :: Broker b a -> Queue -> IO (BrokerMessage b a)
 
   {-| Pop message from queue, waiting for it if not present -}

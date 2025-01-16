@@ -6,49 +6,12 @@ This is a library for implementing asynchronous workers which can fetch jobs fro
 
 You can think of it as a simple Haskell rewrite of [Celery](https://docs.celeryq.dev/en/stable/).
 
-## Design
+## Getting started
 
-The high-level picture is that we have 2 components:
-- **broker** - which is an abstraction over some queueing system
-  (e.g. [pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq) or
-  redis)
-- **worker** - which takes a **broker** definition and adds a job
-  system on top of it
+It's best to see the [`./demo`](./demo) app.
 
-### Broker
-
-The library so far contains 3 implementations for brokers:
-- [**pgmq**](./haskell-bee-pgmq) - which is based on
-  [haskell-pgmq](https://gitlab.iscpif.fr/gargantext/haskell-pgmq)
-- [**redis**](./haskell-bee-redis) - which is a very simple `LPUSH`-based queue
-  (c.f. https://redis.io/glossary/redis-queue/)
-- [**STM**](./haskell-bee-stm) - which uses the `STM`, could be useful for testing
-
-`pgmq` broker so far is assumed to be most stable and complete,
-`redis` and `STM` are considered experimental.
-
-The broker definition uses some more advanced GHC type extensions
-(in particular, [type families](https://wiki.haskell.org/GHC/Type_families))
-at the benefit of having
-[one clear interface](./haskell-bee/src/Async/Worker/Broker/Types.hs)
-for what we expect from the broker.
-
-### Worker
-
-The worker (defined in [`./haskell-bee/src/Async/Worker.hs`](./haskell-bee/src/Async/Worker.hs)) is completely described by it's `State`.
-
-`State` contains information such as:
-- broker instance
-- queue name (one worker is assumed to be assigned to a single queue. If you want more queues, just spawn more workers)
-- actions to be performed on incoming data
-- strategies for handling errors and timeouts
-- events to call custom hooks:
-  - after job is fetched from broker
-  - after job finishes
-  - after timeout occurred
-  - after job error
-
-This project doesn't provide worker management utilities.
+If you're interested in reading about various design aspects, see
+[design notes](./DESIGN_NOTES.md).
 
 ## Testing
 
@@ -127,4 +90,4 @@ any job metadata structure like in haskell-bee. They fall into the
 
 All credit goes to the [Gargantext
 team](https://www.gargantext.org/). This work was done as part of my
-contract there.
+contract at [ISC-PIF CNRS](https://iscpif.fr/).

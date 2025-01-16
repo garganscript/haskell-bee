@@ -42,6 +42,12 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   data Broker PGMQBroker a =
     PGMQBroker' {
         conn :: PSQL.Connection
+        -- | This is the default visibility timeout.
+        -- It is important to set this to something > 0, otherwise 2
+        -- workers might get the same message at the same time.
+        -- This value doesn't need to be large, because later you can specify
+        -- 'timeout' setting in job metadata.
+        -- See: https://tembo.io/pgmq/#visibility-timeout-vt
       , defaultVt :: PGMQ.VisibilityTimeout
       }
   newtype BrokerMessage PGMQBroker a = PGMQBM (PGMQ.Message a)
@@ -78,7 +84,7 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
   dropQueue (PGMQBroker' { conn }) (renderQueue -> queue) = do
     PGMQ.dropQueue conn queue
 
-  readMessageWaiting q@(PGMQBroker' { conn, defaultVt }) queue = loop
+  readMessageWaiting (PGMQBroker' { conn, defaultVt }) queue = loop
     where
       -- loop :: PGMQ.SerializableMessage a => IO (BrokerMessage PGMQBroker' a)
       loop = do
@@ -86,15 +92,15 @@ instance (SerializableMessage a, Show a) => MessageBroker PGMQBroker a where
         -- blocking is outside of GHC (in PostgreSQL itself) and we
         -- can't reliably use it in a highly concurrent situation.
         
-        -- mMsg <- PGMQ.readMessageWithPoll conn queue 10 5 100
+        -- NOTE! This sets message visibility timeout so that other
+        -- workers don't start this job at the same time!
         mMsg <- PGMQ.readMessage conn (renderQueue queue) defaultVt
         case mMsg of
           Nothing -> do
             -- wait a bit, then retry
-            threadDelay (50 * 1000)
-            readMessageWaiting q queue
+            threadDelay (150 * 1000)
+            loop
           Just msg -> do
-            -- TODO! we want to set message visibility timeout so that other workers don't start this job
             return $ PGMQBM msg
 
   popMessageWaiting q@(PGMQBroker' { conn }) queue = loop
