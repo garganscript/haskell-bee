@@ -11,7 +11,7 @@ You can think of it as a simple Haskell rewrite of [Celery](https://docs.celeryq
 It's best to see the [`./demo`](./demo) app.
 
 If you're interested in reading about various design aspects, see
-[design notes](./DESIGN_NOTES.md).
+[design notes](./DESIGN-NOTES.md).
 
 ## Testing
 
