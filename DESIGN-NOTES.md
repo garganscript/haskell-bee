@@ -25,7 +25,7 @@ at the benefit of having
 [one clear interface](./haskell-bee/src/Async/Worker/Broker/Types.hs)
 for what we expect from the broker.
 
-### About timeouts
+### <a id="about-timeouts"></a> About timeouts
 
 #### TLDR
 
@@ -75,7 +75,8 @@ is completely described by it's `State`.
 
 `State` contains information such as:
 - broker instance
-- queue name (one worker is assumed to be assigned to a single queue. If you want more queues, just spawn more workers)
+- queue name (one worker is assumed to be assigned to a single
+  queue. If you want more queues, just spawn more workers)
 - actions to be performed on incoming data
 - strategies for handling errors and timeouts
 - events to call custom hooks:
@@ -84,7 +85,14 @@ is completely described by it's `State`.
   - after timeout occurred
   - after job error
 
-This project doesn't provide worker management utilities.
+This project doesn't provide worker management utilities ([see
+why](#higher-level-patterns). As such, you can just use
+`Control.Concurrent.Async.forConcurrently` to spawn multiple workers
+yourself (see
+[here](https://gitlab.iscpif.fr/gargantext/haskell-gargantext/blob/13457ca8b7db29f178a4001ce9cac0e849473cef/bin/gargantext-cli/CLI/Worker.hs#L130)). The
+worker is designed in such a way that it tries to catch all exceptions
+in your job, and as such shouldn't fail, leak memory, etc :P If it
+does fail, it's probably a bug.
 
 Each worker is basically one big loop which fetches the message and
 processes it accordingly. Thus you need to enumerate your jobs like
@@ -95,6 +103,10 @@ data Job = Echo String | Ping
 ```
 and then specify the `performAction` function which will pattern match
 on the `Job` constructor.
+
+Please note that you can spawn multiple workers assigned to the same
+queue. Broker should guarantee a one-time delivery (see the [About
+timeouts](#about-timeouts) section).
 
 ### Strategies
 
@@ -129,7 +141,7 @@ It aims to simplify things a bit, by specifying a `mkDefaultSendJob'`
 with some good enough values. You only need to specify the queue and
 the job that you want to send.
 
-## Higher-level patterns
+## <a id="higher-level-patterns"></a> Higher-level patterns
 
 Celery allows the programmer to define some [higher-level
 patterns](https://docs.celeryq.dev/en/stable/userguide/canvas.html),
@@ -162,6 +174,8 @@ features :) We're still in a better position than Celery, since
 Haskell's type checking allows to catch more bugs than the Python
 runtime :)
 
+### Ways to deal with it
+
 As such, we could probably reimplement the `performAction` function to
 return something (it currently returns `IO ()`) -- simplest thing
 being some JSON value (we avoid too much type mangling at the cost of
@@ -172,3 +186,31 @@ trigger some other task. It might even be part of an `ArchiveStrategy`
 to call other task. Probably it's best to implement this not in
 `haskell-bee` itself, but as some wrapper around it.
 
+
+Another way is to add some "state" parameter to your task. I.e. your
+first task's return value goes into "state" of the next spawned task.
+
+### map-reduce
+
+The "map" part in "map-reduce" is easy: just spawn as many tasks as
+you need.
+
+It's the "reducing" that is more tricky with `haskell-bee`: wait for
+all tasks to finish and call something afterwards (on the collected
+results).
+
+If we used PGMQ, then we can already use the fact that we can connect
+to a PostgreSQL database :)
+
+We thus create some table with `message_id` and `result` columns. Then
+we spawn our tasks, noting to pass them the table name to use. Each
+task stores it's result that table under it's own `message_id`.
+
+Then we spawn a task to periodically check that table and see if all
+`message_id`'s are filled in. We then have a list of all the results,
+from which we can trigger another task. Remember to remove that table
+afterwards.
+
+If you know if it's possible to implement a "reduce" mechanism just by
+message-passing in this framework, please [tell
+me](mailto:pk@intrepidus.pl).

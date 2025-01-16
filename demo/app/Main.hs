@@ -4,6 +4,7 @@ module Main where
 import App.Types
 import Async.Worker qualified as W
 import Async.Worker.Broker.Types qualified as B
+import Async.Worker.Types qualified as W
 import Control.Concurrent (throwTo)
 import Control.Concurrent.Async (asyncThreadId, wait)
 import Control.Monad (void)
@@ -35,7 +36,7 @@ start (Program (GlobalArgs { .. }) QueueSize) = do
 start (Program (GlobalArgs { .. }) (Echo (EchoArgs { .. }))) = do
   b <- initBroker
   let sj = W.mkDefaultSendJob' b _ga_queue (DT.Echo _ea_message)
-  void $ W.sendJob' sj
+  void $ W.sendJob' $ sj { W.archStrat = W.ASArchive }
 start (Program (GlobalArgs { .. }) (Error (ErrorArgs { .. }))) = do
   b <- initBroker
   let sj = W.mkDefaultSendJob' b _ga_queue (DT.Error _ea_error)
