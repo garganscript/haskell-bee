@@ -135,7 +135,7 @@ because of a `RepeatN` strategy, that counter is incremented.
 
 All that job metadata is quite large. Hence, there is a `SendJob`
 datatype in
-[`./haskell-bee/src/Async/Worker.hs](./haskell-bee/src/Async/Worker.hs).
+[`./haskell-bee/src/Async/Worker.hs`](./haskell-bee/src/Async/Worker.hs).
 
 It aims to simplify things a bit, by specifying a `mkDefaultSendJob'`
 with some good enough values. You only need to specify the queue and
