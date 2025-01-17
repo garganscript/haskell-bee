@@ -86,13 +86,16 @@ is completely described by it's `State`.
   - after job error
 
 This project doesn't provide worker management utilities ([see
-why](#higher-level-patterns). As such, you can just use
+why](#higher-level-patterns)). As such, you can just use
 `Control.Concurrent.Async.forConcurrently` to spawn multiple workers
 yourself (see
 [here](https://gitlab.iscpif.fr/gargantext/haskell-gargantext/blob/13457ca8b7db29f178a4001ce9cac0e849473cef/bin/gargantext-cli/CLI/Worker.hs#L130)). The
 worker is designed in such a way that it tries to catch all exceptions
 in your job, and as such shouldn't fail, leak memory, etc :P If it
 does fail, it's probably a bug.
+
+__NOTE__ A worker management system for `haskell-bee` should probably
+be called `haskell-hive`.
 
 Each worker is basically one big loop which fetches the message and
 processes it accordingly. Thus you need to enumerate your jobs like
@@ -140,6 +143,30 @@ datatype in
 It aims to simplify things a bit, by specifying a `mkDefaultSendJob'`
 with some good enough values. You only need to specify the queue and
 the job that you want to send.
+
+## <a id="periodic-tasks"></a> Periodic tasks
+
+If you look at
+[`./haskell-bee/src/Async/Worker.hs`](./haskell-bee/src/Async/Worker.hs),
+you'll notice that there is a function called `sendJobDelayed`. This
+is because broker allows for a `sendMessageDelayed`. Such a message is
+queued, but the broker will show it after a predefined number of
+seconds.
+
+You can use this mechanism to create periodic tasks. Just call
+something like
+```haskell
+let sj = W.mkDefaultSendJob' broker queueName (Periodic { .. })
+void $ W.sendJob' $ sj { W.delay = B.TimeoutS delay }
+```
+(`performAction` allows you to look up into worker's `State` which
+contains the `broker` connection; don't overuse it though to not block
+the worker).
+
+The message will be hidden and the worker can process other messages
+between the periodic tasks.
+
+The same mechanism can be used to implement exponential backoff etc.
 
 ## <a id="higher-level-patterns"></a> Higher-level patterns
 
@@ -206,7 +233,8 @@ We thus create some table with `message_id` and `result` columns. Then
 we spawn our tasks, noting to pass them the table name to use. Each
 task stores it's result that table under it's own `message_id`.
 
-Then we spawn a task to periodically check that table and see if all
+Then we spawn a task to periodically (see [periodic
+tasks](#periodic-tasks)) check that table and see if all
 `message_id`'s are filled in. We then have a list of all the results,
 from which we can trigger another task. Remember to remove that table
 afterwards.

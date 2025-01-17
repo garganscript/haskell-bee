@@ -49,3 +49,7 @@ start (Program (GlobalArgs { .. }) (Wait (WaitArgs { .. }))) = do
   b <- initBroker
   let sj = W.mkDefaultSendJob' b _ga_queue (DT.Wait _wa_time)
   void $ W.sendJob' sj
+start (Program (GlobalArgs { .. }) (Periodic (PeriodicArgs { .. }))) = do
+  b <- initBroker
+  let sj = W.mkDefaultSendJob' b _ga_queue (DT.Periodic { counter = 0, delay = _pa_interval, name = _pa_name })
+  void $ W.sendJob' $ sj { W.delay = B.TimeoutS _pa_interval }

@@ -41,6 +41,8 @@ newtype Queue = Queue { _Queue :: T.Text }
   deriving stock (Eq, Ord)
   deriving newtype (Semigroup, IsString, Show)
 
+-- | This is just a wrapper so that you know you use seconds as units
+-- for `Int`.
 newtype TimeoutS = TimeoutS { _TimeoutS :: Int  } -- timeout for a message, in seconds
   deriving stock (Eq, Ord)
   deriving newtype (Num, Show)

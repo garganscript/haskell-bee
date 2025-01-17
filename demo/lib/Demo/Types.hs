@@ -9,6 +9,7 @@ data Job =
   | Wait Int
   | Error String
   | Quit
+  | Periodic { counter :: Int, delay :: Int, name :: String }
   deriving (Eq, Show, Generic)
 -- | Generic to/from JSON is bad, but we don't care
 instance ToJSON Job

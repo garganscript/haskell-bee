@@ -6,6 +6,7 @@ module App.Types
   , EchoArgs(..)
   , ErrorArgs(..)
   , WaitArgs(..)
+  , PeriodicArgs(..)
 
   , programParser )
 where
@@ -44,6 +45,7 @@ data Command
   | Error ErrorArgs
   | Quit
   | Wait WaitArgs
+  | Periodic PeriodicArgs
   deriving (Eq, Show)
 
 commandParser :: Parser Command
@@ -56,6 +58,7 @@ commandParser = subparser
    <> command "error" (info (error' <**> helper) (progDesc "error task") )
    <> command "quit" (info (quit <**> helper) (progDesc "quit task") )
    <> command "wait" (info (wait <**> helper) (progDesc "wait task") )
+   <> command "periodic" (info (periodic <**> helper) (progDesc "periodic task") )
     )
 
 data WorkerArgs =
@@ -102,3 +105,16 @@ wait = Wait
   <$> ( WaitArgs
      <$> argument auto ( metavar "TIME"
                       <> help "Time to wait, in seconds") )
+
+data PeriodicArgs =
+  PeriodicArgs { _pa_interval :: Int
+               , _pa_name     :: String }
+  deriving (Eq, Show)
+
+periodic :: Parser Command
+periodic = Periodic
+  <$> ( PeriodicArgs
+     <$> argument auto ( metavar "INTERVAL"
+                      <> help "Interval in seconds between tasks")
+     <*> strArgument ( metavar "NAME"
+                      <> help "Name of the task, to distinguish from others") )

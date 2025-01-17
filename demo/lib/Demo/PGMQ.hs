@@ -23,11 +23,13 @@ brokerInitParams = do
 
   return $ PGMQBrokerInitConnStr (T.encodeUtf8 connInfo) 1
 
+
 initBroker :: (HasWorkerBroker PGMQBroker Job)
            => IO (B.Broker PGMQBroker (W.Job Job))
 initBroker = do
   params <- brokerInitParams
   B.initBroker params
+
 
 initWorker :: (HasWorkerBroker PGMQBroker Job)
            => String
