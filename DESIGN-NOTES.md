@@ -273,6 +273,11 @@ simplified to look almost like a RPC call). Then, table creation,
 value insert, table checking and cleanup could be implemented
 generically.
 
+However, we want to keep broker focused on queue mechanism
+only. Generally, a broker is not a database. We could introduce some
+kind of "scratch space" for tasks (a "Result backend" in Celery
+terms). I think this would complicate the project though.
+
 If you know whether it's possible to implement a "reduce" mechanism
 just by message-passing in this framework, please
 [tell me](mailto:pk@intrepidus.pl).
