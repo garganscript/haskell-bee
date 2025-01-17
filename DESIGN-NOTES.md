@@ -186,6 +186,12 @@ between the periodic tasks.
 
 The same mechanism can be used to implement exponential backoff etc.
 
+__NOTE__: To make sure your periodic task is scheduled for next
+execution, wrap your action with
+[`Control.Exception.Safe.finally`](https://hackage.haskell.org/package/safe-exceptions-0.1.7.4/docs/Control-Exception-Safe.html#v:finally).
+The exception will be re-raised, but you have a guarantee of
+scheduling the task for later.
+
 ## <a id="higher-level-patterns"></a> Higher-level patterns
 
 Celery allows the programmer to define some [higher-level
