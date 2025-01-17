@@ -35,6 +35,8 @@ your job to take (to be safe, add some margin). For PGMQ, set
 
 #### <a id="broker-details"></a> Details
 
+##### Timeout
+
 Each job has a `timeout` field in it's metadata. When a job is
 fetched, meadata is read and the timeout is set in the broker
 immediately. This is to tell the broker to hide this message for given
@@ -50,13 +52,15 @@ counter and compares job execution time. If it exceeds that same
 `timeout` metadata value, it acts according to the specified
 `TimeoutStrategy`. This should be the "normal" way to call timeouts.
 
-Finally, the `pgmq` broker introduces a `defaultVt` value
+##### <a id="broker-visibility-timeout"></a> Visibility timeout
+
+The `pgmq` broker introduces a `defaultVt` value
 (https://tembo.io/pgmq/#visibility-timeout-vt). This is because after
 the job is sent to the worker, it is kept in pgmq queue until the
 worker marks it as finished. If `defaultVt` would be `0`, the job will
 be shown immediately to another worker which can result in duplicate
-work. (this behavior seems to be consistent with e.g. [Amazon
-SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service#Message_deletion)).
+work. (this behavior seems to be consistent with e.g.
+[Amazon SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service#Message_deletion)).
 
 Since the worker already executes setting broker visibility timeout
 using job's metadata (as fast as possible), it will eventually block
@@ -67,6 +71,18 @@ where the same job is available to multiple workers. To prevent this,
 set `defaultVt` to some positive number. It has to be large enough
 that the worker has time to fetch the message and set the custom
 `timeout` from job's metadata.
+
+##### Timeout vs visibilityt imeout
+
+Note that `timeout` is a purely worker setting. It is used to limit
+the time it takes for a job to run. If a job hangs, the worker kills
+it and acts according to the job's `timeout strategy`.
+
+On the other hand, `visibility timeout` is a broker setting.
+
+These two are related in that the worker, upon fetching a job, will
+set `visibility timeout` of a task to that of a `timeout` so that it's
+invisible for a `timeout` duration.
 
 ## Worker
 
@@ -152,8 +168,8 @@ If you look at
 you'll notice that there is a function called `sendJobDelayed`. This
 is because broker allows for a `sendMessageDelayed`. Such a message is
 queued, but the broker will show it after a predefined number of
-seconds. (Internall, for PGMQ, this is just the `visibility timeout`
-setting, c.f. [broker details](#broker-details)).
+seconds. (Internally, for PGMQ, this is just the `visibility timeout`
+setting, c.f. [broker visibility timeout](#broker-visibility-timeout)).
 
 You can use this mechanism to create periodic tasks. Just call
 something like
@@ -193,10 +209,10 @@ holds job's results).
 The reason is complexity of these features in general. I have worked
 with Celery couple years ago and back then the `chain` etc. mechanisms
 weren't that stable and led my code to deadlocks. So this wasn't easy
-for them to implement as well. Just look at the [bug
-reports](https://github.com/celery/celery/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22Issue%20Type%3A%20Bug%20Report%22). Many
-of them are in fact about concurrency expectations of a multi-worker
-setup or higher-level task patterns.
+for them to implement as well. Just look at the
+[bug reports](https://github.com/celery/celery/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22Issue%20Type%3A%20Bug%20Report%22).
+Many of them are in fact about concurrency expectations of a
+multi-worker setup or higher-level task patterns.
 
 Concurrency is hard and we avoid it by not implementing unnecessary
 features :) We're still in a better position than Celery, since
@@ -235,12 +251,22 @@ We thus create some table with `message_id` and `result` columns. Then
 we spawn our tasks, noting to pass them the table name to use. Each
 task stores it's result that table under it's own `message_id`.
 
-Then we spawn a task to periodically (see [periodic
-tasks](#periodic-tasks)) check that table and see if all
+Then we spawn a task to periodically (see
+[periodic tasks](#periodic-tasks)) check that table and see if all
 `message_id`'s are filled in. We then have a list of all the results,
 from which we can trigger another task. Remember to remove that table
 afterwards.
 
-If you know if it's possible to implement a "reduce" mechanism just by
-message-passing in this framework, please [tell
-me](mailto:pk@intrepidus.pl).
+For more details, see [`demo`](./demo), where this pattern is
+implemented as `StarMap` task and `SquareMap` subtask (which needs the
+`tableName` to store its result).
+
+Probably `tableName` and `messageIds` could be stored in task's
+metadata (this way `StarMap` and `SquareMap` constructors can be
+simplified to look almost like a RPC call). Then, table creation,
+value insert, table checking and cleanup could be implemented
+generically.
+
+If you know whether it's possible to implement a "reduce" mechanism
+just by message-passing in this framework, please
+[tell me](mailto:pk@intrepidus.pl).

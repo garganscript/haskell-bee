@@ -64,6 +64,7 @@ library
     build-depends:    base ^>=4.17.2.1
                     , aeson >= 2.1 && < 2.3
                     , async >= 2.2 && < 2.3
+                    , containers >= 0.6.7 && < 0.8
                     , haskell-bee
                     , haskell-bee-pgmq
                     , postgresql-simple >= 0.7.0 && < 0.8
@@ -98,10 +99,15 @@ executable demo
 
     -- Other library packages from which modules are imported.
     build-depends:    base ^>=4.17.2.1
+                    , aeson >= 2.1 && < 2.3
                     , async >= 2.2 && < 2.3
                     , haskell-bee
                     , haskell-bee-demo
                     , optparse-applicative >= 0.18 && < 0.19
+                    , postgresql-simple >= 0.6 && < 0.8
+                    , random >= 1.2 && < 1.4
+                    , random-strings == 0.1.1.0
+                    , text >= 2.0 && < 2.2
                     , unix >= 2.8 && < 2.9
 
     -- Directories containing source files.

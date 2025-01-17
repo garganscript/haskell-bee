@@ -7,6 +7,7 @@ module App.Types
   , ErrorArgs(..)
   , WaitArgs(..)
   , PeriodicArgs(..)
+  , StarMapArgs(..)
 
   , programParser )
 where
@@ -46,6 +47,7 @@ data Command
   | Quit
   | Wait WaitArgs
   | Periodic PeriodicArgs
+  | StarMap StarMapArgs
   deriving (Eq, Show)
 
 commandParser :: Parser Command
@@ -59,6 +61,7 @@ commandParser = subparser
    <> command "quit" (info (quit <**> helper) (progDesc "quit task") )
    <> command "wait" (info (wait <**> helper) (progDesc "wait task") )
    <> command "periodic" (info (periodic <**> helper) (progDesc "periodic task") )
+   <> command "star-map" (info (starMap <**> helper) (progDesc "star-map task") )
     )
 
 data WorkerArgs =
@@ -118,3 +121,13 @@ periodic = Periodic
                       <> help "Interval in seconds between tasks")
      <*> strArgument ( metavar "NAME"
                       <> help "Name of the task, to distinguish from others") )
+
+data StarMapArgs =
+  StarMapArgs { _sm_jobs :: Int }
+  deriving (Eq, Show)
+
+starMap :: Parser Command
+starMap = StarMap
+  <$> ( StarMapArgs
+     <$> argument auto ( metavar "JOBS"
+                      <> help "Number of jobs to spawn") )

@@ -10,7 +10,6 @@ import Control.Concurrent.Async (Async, withAsync)
 import Data.Maybe (fromMaybe)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
-import Database.PostgreSQL.Simple qualified as PSQL
 import Demo.Action (performAction)
 import Demo.Types (Job)
 import System.Environment (lookupEnv)
