@@ -31,6 +31,8 @@ cabal v2-run demo -- echo "hello"
 cabal v2-run demo -- error "oops!"
 cabal v2-run demo -- wait 10
 cabal v2-run demo -- quit
+cabal v2-run demo -- periodic 4 'my periodic task'
+cabal v2-run demo -- star-map 25
 ```
 
 ## About killing with `Ctrl-C`
