@@ -33,7 +33,7 @@ Set `timeout` in your job metadata to the number of seconds you expect
 your job to take (to be safe, add some margin). For PGMQ, set
 `defaultVt` to some positive value (`5` is good enough).
 
-#### Details
+#### <a id="broker-details"></a> Details
 
 Each job has a `timeout` field in it's metadata. When a job is
 fetched, meadata is read and the timeout is set in the broker
@@ -55,7 +55,8 @@ Finally, the `pgmq` broker introduces a `defaultVt` value
 the job is sent to the worker, it is kept in pgmq queue until the
 worker marks it as finished. If `defaultVt` would be `0`, the job will
 be shown immediately to another worker which can result in duplicate
-work.
+work. (this behavior seems to be consistent with e.g. [Amazon
+SQS](https://en.wikipedia.org/wiki/Amazon_Simple_Queue_Service#Message_deletion)).
 
 Since the worker already executes setting broker visibility timeout
 using job's metadata (as fast as possible), it will eventually block
@@ -151,7 +152,8 @@ If you look at
 you'll notice that there is a function called `sendJobDelayed`. This
 is because broker allows for a `sendMessageDelayed`. Such a message is
 queued, but the broker will show it after a predefined number of
-seconds.
+seconds. (Internall, for PGMQ, this is just the `visibility timeout`
+setting, c.f. [broker details](#broker-details)).
 
 You can use this mechanism to create periodic tasks. Just call
 something like
