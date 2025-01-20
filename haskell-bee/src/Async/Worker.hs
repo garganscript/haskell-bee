@@ -201,7 +201,9 @@ handleTimeoutError _state@(State { .. }) _jt@(JobTimeout { .. }) = do
   case timeoutStrategy mdata of
     TSDelete -> deleteMessage broker queueName msgId
     TSArchive -> archiveMessage broker queueName msgId
-    TSRepeat -> pure ()
+    TSRepeat -> do
+      void $ deleteMessage broker queueName msgId
+      void $ sendJob broker queueName (job { metadata = mdata { readCount = readCount mdata + 1 } })
     TSRepeatNElseArchive n -> do
       let readCt = readCount mdata
       -- OK so this can be repeated at most 'n' times, compare 'readCt' with 'n'
@@ -241,7 +243,7 @@ handleJobError _state@(State { .. }) brokerMessage = do
   let mdata = metadata job
   case errorStrategy mdata of
     ESDelete -> deleteMessage broker queueName msgId
-    ESArchive -> deleteMessage broker queueName msgId
+    ESArchive -> archiveMessage broker queueName msgId
     ESRepeatNElseArchive n -> do
       let readCt = readCount mdata
       if readCt >= n then
