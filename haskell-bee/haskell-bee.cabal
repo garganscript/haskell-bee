@@ -80,6 +80,7 @@ library
                     , safe-exceptions >= 0.1.7 && < 0.2
                     , stm >= 2.5.3 && < 3
                     , text >= 1.2 && < 2.2
+                    , unbounded-delays >= 0.1.1 && < 0.2
 
     -- Directories containing source files.
     hs-source-dirs:   src

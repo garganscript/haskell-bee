@@ -41,9 +41,9 @@ import Async.Worker.Broker
 import Async.Worker.Types
 import Control.Concurrent.STM (atomically)
 import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, writeTVar)
+import Control.Concurrent.Timeout qualified as Timeout
 import Control.Exception.Safe (catches, Handler(..), throwIO, SomeException, Exception)
 import Control.Monad (forever, void, when)
-import System.Timeout qualified as Timeout
 
 
 -- | If you want to stop a worker safely, use `throwTo'
@@ -135,7 +135,7 @@ handleMessage state@(State { .. }) brokerMessage = do
   -- PGMQ).
   setMessageTimeout broker queueName msgId (TimeoutS timeoutS)
   -- mTimeout <- Timeout.timeout timeoutS (wrapPerformActionInJobException state brokerMessage)
-  mTimeout <- Timeout.timeout (timeoutS * microsecond) (runAction state brokerMessage)
+  mTimeout <- Timeout.timeout ((fromIntegral timeoutS) * microsecond) (runAction state brokerMessage)
 
   let archiveHandler = do
         case archiveStrategy mdata of
@@ -265,8 +265,8 @@ sendJobDelayed :: (HasWorkerBroker b a) => Broker b (Job a) -> Queue -> Job a ->
 sendJobDelayed broker queueName job timeoutS = do
   sendMessageDelayed broker queueName (toMessage job) timeoutS
 
-microsecond :: Int
-microsecond = 10^(6 :: Int)
+microsecond :: Integer
+microsecond = 10^(6 :: Integer)
 
 
 {- $sendJob
