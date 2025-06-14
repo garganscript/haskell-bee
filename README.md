@@ -49,6 +49,22 @@ No need to start the broker, just run the tests:
 cabal v2-test haskell-bee-stm --test-show-details=streaming
 ```
 
+## Things to watch out for
+
+### Exceptions
+
+`haskell-bee` uses exceptions to detect any issues with the current
+job and trigger timeouts. As such, if your code contains something
+like:
+```haskell
+runSomeAction `catch` (\(e :: SomeException) -> whatever)
+```
+and `whatever` doesn't re-throw `e`, your job will continue, without
+noticing `Timeout` etc.
+
+Therefore, please be careful when catching exceptions and specialize
+them only to the ones you really want to handle.
+
 ## Other work
 
 [Haskell Job Queues: An Ultimate Guide (2020)](https://www.haskelltutorials.com/odd-jobs/haskell-job-queues-ultimate-guide.html)
