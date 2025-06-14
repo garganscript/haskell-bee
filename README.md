@@ -2,13 +2,23 @@
 
 ![bee on a honeycomb. Credits: https://en.wikipedia.org/wiki/Honey_bee#/media/File:Western_honey_bee_on_a_honeycomb.jpg](img/bee-wiki.jpg)
 
+A lightweight, type-safe library for implementing asynchronous job workers in Haskell.
+
 This is a library for implementing asynchronous workers which can fetch jobs from a (configurable) broker.
 
 You can think of it as a simple Haskell rewrite of [Celery](https://docs.celeryq.dev/en/stable/).
 
+**Why Haskell?** Haskell's type system makes async job processing much safer and easier to reason about compared to Python's Celery. Combined with Haskell's [excellent concurrency story](https://bitbashing.io/haskell-concurrency.html), you get robust job processing with compile-time guarantees.
+
+**Key features:**
+- Multiple broker backends (PostgreSQL/PGMQ, Redis, STM)
+- Configurable timeout and retry strategies
+- Exception-safe job processing
+- Support for delayed/periodic tasks
+
 ## Getting started
 
-It's best to see the [`./demo`](./demo) app.
+The quickest way to understand how to use haskell-bee is to check out the [`./demo`](./demo) app, which shows practical examples of job processing.
 
 If you're interested in reading about various design aspects, see
 [design notes](./DESIGN-NOTES.md).
@@ -53,17 +63,20 @@ cabal v2-test haskell-bee-stm --test-show-details=streaming
 
 ### Exceptions
 
-`haskell-bee` uses exceptions to detect any issues with the current
-job and trigger timeouts. As such, if your code contains something
-like:
+`haskell-bee` uses exceptions to detect issues with
+jobs and trigger timeouts. Be careful when catching exceptions in your code.
+
+**Problem:** If your code contains something like: 
 ```haskell
 runSomeAction `catch` (\(e :: SomeException) -> whatever)
 ```
-and `whatever` doesn't re-throw `e`, your job will continue, without
-noticing `Timeout` etc.
+and `whatever` doesn't re-throw `e`, your job will continue running without
+noticing `Timeout` exceptions.
 
-Therefore, please be careful when catching exceptions and specialize
-them only to the ones you really want to handle.
+**Solution:** Always specialize your exception handling to only catch the specific exceptions you want to handle:
+```haskell
+runSomeAction `catch` (\(e :: MySpecificException) -> handleMyException e)
+```
 
 ## Other work
 

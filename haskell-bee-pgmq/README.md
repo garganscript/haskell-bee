@@ -1,6 +1,8 @@
 # haskell-bee-pgmq
 
-`pgmq` broker implementation for `haskell-bee`.
+PostgreSQL/PGMQ broker implementation for [haskell-bee](https://github.com/garganscript/haskell-bee).
+
+This package provides a PostgreSQL-backed message queue broker using [PGMQ](https://github.com/tembo-io/pgmq) (PostgreSQL Message Queue).
 
 ## Database initialization
 
