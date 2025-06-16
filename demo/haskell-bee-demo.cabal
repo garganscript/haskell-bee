@@ -61,7 +61,7 @@ library
                    , Demo.PGMQ
                    , Demo.Types
     
-    build-depends:    base ^>=4.17.2.1
+    build-depends:    base >=4.17.2.1 && < 5
                     , aeson >= 2.1 && < 2.3
                     , async >= 2.2 && < 2.3
                     , containers >= 0.6.7 && < 0.8
@@ -98,7 +98,7 @@ executable demo
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.1
+    build-depends:    base >=4.17.2.1 && < 5
                     , aeson >= 2.1 && < 2.3
                     , async >= 2.2 && < 2.3
                     , haskell-bee

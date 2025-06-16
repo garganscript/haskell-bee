@@ -23,11 +23,15 @@ name:               haskell-bee-tests
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: Reusable test suite for any haskell-bee Broker implementation
+          
+-- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
+extra-doc-files:    README.md
 
 -- A longer description of the package.
--- description:
-
+description:        
+    Please see the README on GitHub at <https://github.com/garganscript/haskell-bee/blob/master/haskell-bee/README.md>
+   
 -- URL for the project homepage or repository.
 homepage:           https://gitlab.iscpif.fr/gargantext/haskell-bee
 
@@ -58,13 +62,11 @@ library
     -- Import common warning flags.
     import:           warnings
     
-    type:             exitcode-stdio-1.0
-
     exposed-modules:  Test.Integration.Broker
                     , Test.Integration.Utils
                     , Test.Integration.Worker
         
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , containers >= 0.6 && < 0.8
                     , hedis >= 0.15.2 && < 0.16
@@ -76,7 +78,7 @@ library
                     , tasty-hspec >= 1.2.0 && < 2
                     , text >= 1.2 && < 2.2
                     
-                    , haskell-bee
+                    , haskell-bee ^>= 0.1.0.0
 
     -- Directories containing source files.
     hs-source-dirs:   tests
@@ -93,4 +95,4 @@ library
       OverloadedStrings
       RecordWildCards
 
-    ghc-options: -threaded -fprof-auto
+    ghc-options: -threaded

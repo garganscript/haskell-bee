@@ -23,11 +23,15 @@ name:               haskell-bee
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: A lightweight library for asynchronous job workers with multiple broker backends
+          
+-- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
+extra-doc-files:    README.md
 
 -- A longer description of the package.
--- description:
-
+description:        
+    Please see the README on GitHub at <https://github.com/garganscript/haskell-bee/blob/master/haskell-bee/README.md>
+   
 -- URL for the project homepage or repository.
 homepage:           https://gitlab.iscpif.fr/gargantext/haskell-bee
 
@@ -75,7 +79,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , safe-exceptions >= 0.1.7 && < 0.2
                     , stm >= 2.5.3 && < 3
@@ -103,7 +107,7 @@ test-suite test-unit
     
     type:             exitcode-stdio-1.0
     
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , tasty >= 1.5 && < 1.6
                     , tasty-quickcheck >= 0.10 && < 0.12

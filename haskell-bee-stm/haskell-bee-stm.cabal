@@ -23,10 +23,14 @@ name:               haskell-bee-stm
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: STM broker implementation for haskell-bee
+   
+-- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
+extra-doc-files:    README.md
 
 -- A longer description of the package.
--- description:
+description:        
+    Please see the README on GitHub at <https://github.com/garganscript/haskell-bee/blob/master/haskell-bee/README.md>
 
 -- URL for the project homepage or repository.
 homepage:           https://gitlab.iscpif.fr/gargantext/haskell-bee
@@ -72,7 +76,7 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , bytestring >= 0.11 && < 0.13
                     , containers >= 0.6.7 && < 0.8
@@ -86,7 +90,7 @@ library
                     , units >= 2.4 && < 2.5
                     , unix-time >= 0.4.11 && < 0.5
 
-                    , haskell-bee
+                    , haskell-bee ^>= 0.1.0.0
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -110,14 +114,14 @@ test-suite stm-test-unit
     
     type:             exitcode-stdio-1.0
     
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , tasty >= 1.5 && < 1.6
                     , tasty-hunit >= 0.10 && < 0.11
                     , tasty-quickcheck >= 0.10 && < 0.12
                     , unix-time >= 0.4.11 && < 0.5
                     
-                    , haskell-bee
+                    , haskell-bee ^>= 0.1.0.0
                     , haskell-bee-stm
 
     -- Directories containing source files.
@@ -146,7 +150,7 @@ test-suite stm-test-integration
 
     other-modules:  Test.Integration.STM
         
-    build-depends:    base ^>=4.17.2.0
+    build-depends:    base >=4.17.2.0 && < 5
                     , aeson >= 2.1 && < 2.3
                     , containers >= 0.6 && < 0.8
                     , hspec >= 2.11 && < 3
@@ -156,8 +160,8 @@ test-suite stm-test-integration
                     , tasty-hspec >= 1.2.0 && < 2
                     , text >= 1.2 && < 2.2
                     
-                    , haskell-bee
-                    , haskell-bee-tests
+                    , haskell-bee ^>= 0.1.0.0
+                    , haskell-bee-tests ^>= 0.1.0.0
                     , haskell-bee-stm
 
     -- Directories containing source files.
@@ -176,4 +180,4 @@ test-suite stm-test-integration
       OverloadedStrings
       RecordWildCards
 
-    ghc-options: -threaded -fprof-auto
+    ghc-options: -threaded
