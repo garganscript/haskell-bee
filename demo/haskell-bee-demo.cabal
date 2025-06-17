@@ -68,6 +68,8 @@ library
                     , haskell-bee
                     , haskell-bee-pgmq
                     , postgresql-simple >= 0.7.0 && < 0.8
+                    , random >= 1.2 && < 1.4
+                    , random-strings == 0.1.1.0
                     , safe-exceptions >= 0.1.7 && < 0.2
                     , text >= 2.0 && < 2.2
 

@@ -9,7 +9,8 @@ import Control.Concurrent (threadDelay)
 import Control.Exception.Safe (Exception, throwIO)
 import Control.Monad (void)
 import Data.Aeson qualified as Aeson
-import Data.Maybe (fromMaybe)
+import Data.Int (Int8)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
@@ -17,6 +18,8 @@ import Database.PostgreSQL.Simple qualified as PSQL
 import Database.PostgreSQL.Simple.Types qualified as PSQL  -- Identifier
 import Demo.Types (Job(..))
 import System.Environment (lookupEnv)
+import System.Random (randomIO)
+import Test.RandomStrings (randomASCII, randomString, onlyLower)
 
 
 data MyException = MyException String
@@ -50,11 +53,39 @@ performAction (W.State { broker, queueName }) bm = do
       else do
         putStrLn $ "[periodic " <> name <> "] stopping"
 
+    sm@(StarMap { pgConnString, mTableName = Nothing, numJobs }) -> do
+      -- No table name, this means we run for the first time.
+      -- Create the table and spawn subtasks.
+      postfix <- randomString (onlyLower randomASCII) 20
+      let tableName = "starmap_" <> postfix
+      let tName = PSQL.Identifier $ T.pack tableName
+    
+      let connInfo = T.encodeUtf8 $ T.pack pgConnString
+      conn <- PSQL.connectPostgreSQL connInfo
+      _ <- PSQL.execute conn "CREATE TABLE ? (message_id INT, value INT)" (PSQL.Only tName)
+
+      msgIds <- mapM (\_ -> do
+                 x <- randomIO :: IO Int8
+                 let sj = W.mkDefaultSendJob' broker queueName (SquareMap { x = fromIntegral x, tableName })
+                 W.sendJob' sj
+             ) [0..numJobs]
+
+      -- Normally message ids don't need to be ints. However, with PGMQ
+      -- they are and we use a hack here to get them (I don't want to
+      -- expose `PGMQMid` to `Int` conversion without serious reasons)
+      let jMsgIds = Aeson.encode <$> msgIds
+      let intMsgIds = catMaybes $ (\j -> Aeson.decode j :: Maybe Int) <$> jMsgIds
+      let sj = W.mkDefaultSendJob' broker queueName $
+                 StarMap { pgConnString
+                         , mTableName = Just tableName
+                         , numJobs
+                         , messageIds = intMsgIds }
+      void $ W.sendJob' $ sj { W.delay = B.TimeoutS 1 }
+
     -- | A task that watches given table and checks if all subtasks are finished
-    sm@(StarMap { tableName, messageIds }) -> do
+    sm@(StarMap { pgConnString, mTableName = Just tableName, messageIds }) -> do
       -- just reuse the broker DB
-       mConnInfo <- lookupEnv "POSTGRES_CONN"
-       let connInfo = T.encodeUtf8 $ T.pack $ fromMaybe "host=localhost port=5432 dbname=postgres user=postgres" mConnInfo
+       let connInfo = T.encodeUtf8 $ T.pack pgConnString
     
        conn <- PSQL.connectPostgreSQL connInfo
 
@@ -64,6 +95,7 @@ performAction (W.State { broker, queueName }) bm = do
        if (Set.fromList finishedMessageIds) == (Set.fromList messageIds) then do
          _ <- PSQL.execute conn "DROP TABLE ?" (PSQL.Only tName)
          putStrLn $ "[star-map @ " <> tableName <> "] all subtasks finished : " <> show rows
+         putStrLn $ "[star-map @ " <> tableName <> "] sum (aggregation demo) : " <> show (sum (snd <$> rows))
        else do
          putStrLn $ "[star-map @ " <> tableName <> "] rescheduling to check again"
          -- Need to reschedule starmap checking

@@ -66,27 +66,12 @@ start (Program (GlobalArgs { .. }) (Periodic (PeriodicArgs { .. }))) = do
 start (Program (GlobalArgs { .. }) (StarMap (StarMapArgs { .. }))) = do
   -- Create temporary table first
   mConnInfo <- lookupEnv "POSTGRES_CONN"
-  let connInfo = T.encodeUtf8 $ T.pack $ fromMaybe "host=localhost port=5432 dbname=postgres user=postgres" mConnInfo
-
-  postfix <- randomString (onlyLower randomASCII) 20
-  let tableName = "starmap_" <> postfix
-  let tName = PSQL.Identifier $ T.pack tableName
-
-  conn <- PSQL.connectPostgreSQL connInfo
-
-  _ <- PSQL.execute conn "CREATE TABLE ? (message_id INT, value INT)" (PSQL.Only tName)
-
+  let pgConnString = fromMaybe "host=localhost port=5432 dbname=postgres user=postgres" mConnInfo
 
   b <- initBroker
-  msgIds <- mapM (\_ -> do
-                     x <- randomIO :: IO Int8
-                     let sj = W.mkDefaultSendJob' b _ga_queue (DT.SquareMap { x = fromIntegral x, tableName })
-                     W.sendJob' sj
-                 ) [0.._sm_jobs]
-  -- Normally message ids don't need to be ints. However, with PGMQ
-  -- they are and we use a hack here to get them (I don't want to
-  -- expose `PGMQMid` to `Int` conversion without serious reasons)
-  let jMsgIds = Aeson.encode <$> msgIds
-  let intMsgIds = catMaybes $ (\j -> Aeson.decode j :: Maybe Int) <$> jMsgIds
-  let sj = W.mkDefaultSendJob' b _ga_queue (DT.StarMap { tableName, messageIds = intMsgIds })
+  let sj = W.mkDefaultSendJob' b _ga_queue $
+             DT.StarMap { pgConnString
+                        , mTableName = Nothing
+                        , numJobs = _sm_jobs
+                        , messageIds = [] }
   void $ W.sendJob' $ sj { W.delay = B.TimeoutS 1 }
