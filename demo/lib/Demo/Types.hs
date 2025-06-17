@@ -11,7 +11,7 @@ data Job =
   | Quit
   | Periodic { counter :: Int, delay :: Int, name :: String }
   | StarMap { pgConnString :: String, mTableName :: Maybe String, numJobs :: Int, messageIds :: [Int] }
-  | SquareMap { x :: Int, tableName :: String }
+  | SquareMap { pgConnString :: String, x :: Int, tableName :: String }
   deriving (Eq, Show, Generic)
 -- | Generic to/from JSON is bad, but we don't care
 instance ToJSON Job

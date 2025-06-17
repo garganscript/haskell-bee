@@ -66,7 +66,8 @@ performAction (W.State { broker, queueName }) bm = do
 
       msgIds <- mapM (\_ -> do
                  x <- randomIO :: IO Int8
-                 let sj = W.mkDefaultSendJob' broker queueName (SquareMap { x = fromIntegral x, tableName })
+                 let sj = W.mkDefaultSendJob' broker queueName $
+                            SquareMap { pgConnString, x = fromIntegral x, tableName }
                  W.sendJob' sj
              ) [0..numJobs]
 
@@ -103,13 +104,12 @@ performAction (W.State { broker, queueName }) bm = do
          void $ W.sendJob' $ sj { W.delay = B.TimeoutS 5 }
 
     -- | A subtask which squares a number and stores in in a table, for `StarMap` to analyze
-    SquareMap { x, tableName } -> do
+    SquareMap { pgConnString, x, tableName } -> do
        let jMsgId = Aeson.encode (B.messageId bm)
        msgId <- Aeson.throwDecode jMsgId :: IO Int
 
        putStrLn $ "[square-map @ " <> tableName <> " :: " <> show msgId <> "] x = " <> show x
-       mConnInfo <- lookupEnv "POSTGRES_CONN"
-       let connInfo = T.encodeUtf8 $ T.pack $ fromMaybe "host=localhost port=5432 dbname=postgres user=postgres" mConnInfo
+       let connInfo = T.encodeUtf8 $ T.pack pgConnString
     
        conn <- PSQL.connectPostgreSQL connInfo
 
