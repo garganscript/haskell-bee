@@ -16,10 +16,10 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as T
 import Database.PostgreSQL.Simple qualified as PSQL
 import Database.PostgreSQL.Simple.Types qualified as PSQL  -- Identifier
+import Demo.State (initTable, collectWhenFinished, insertResult)
 import Demo.Types (Job(..))
 import System.Environment (lookupEnv)
 import System.Random (randomIO)
-import Test.RandomStrings (randomASCII, randomString, onlyLower)
 
 
 data MyException = MyException String
@@ -56,13 +56,7 @@ performAction (W.State { broker, queueName }) bm = do
     sm@(StarMap { pgConnString, mTableName = Nothing, numJobs }) -> do
       -- No table name, this means we run for the first time.
       -- Create the table and spawn subtasks.
-      postfix <- randomString (onlyLower randomASCII) 20
-      let tableName = "starmap_" <> postfix
-      let tName = PSQL.Identifier $ T.pack tableName
-    
-      let connInfo = T.encodeUtf8 $ T.pack pgConnString
-      conn <- PSQL.connectPostgreSQL connInfo
-      _ <- PSQL.execute conn "CREATE TABLE ? (message_id INT, value INT)" (PSQL.Only tName)
+      tableName <- initTable pgConnString "starmap"
 
       msgIds <- mapM (\_ -> do
                  x <- randomIO :: IO Int8
@@ -85,23 +79,16 @@ performAction (W.State { broker, queueName }) bm = do
 
     -- | A task that watches given table and checks if all subtasks are finished
     sm@(StarMap { pgConnString, mTableName = Just tableName, messageIds }) -> do
-      -- just reuse the broker DB
-       let connInfo = T.encodeUtf8 $ T.pack pgConnString
-    
-       conn <- PSQL.connectPostgreSQL connInfo
-
-       let tName = PSQL.Identifier $ T.pack tableName
-       rows <- PSQL.query conn "SELECT message_id, value FROM ? WHERE value IS NOT NULL" (PSQL.Only tName) :: IO [(Int, Int)]
-       let finishedMessageIds = fst <$> rows
-       if (Set.fromList finishedMessageIds) == (Set.fromList messageIds) then do
-         _ <- PSQL.execute conn "DROP TABLE ?" (PSQL.Only tName)
-         putStrLn $ "[star-map @ " <> tableName <> "] all subtasks finished : " <> show rows
-         putStrLn $ "[star-map @ " <> tableName <> "] sum (aggregation demo) : " <> show (sum (snd <$> rows))
-       else do
-         putStrLn $ "[star-map @ " <> tableName <> "] rescheduling to check again"
-         -- Need to reschedule starmap checking
-         let sj = W.mkDefaultSendJob' broker queueName sm
-         void $ W.sendJob' $ sj { W.delay = B.TimeoutS 5 }
+      mRows <- collectWhenFinished pgConnString tableName messageIds :: IO (Maybe [(Int, Int)])
+      case mRows of
+        Just rows -> do
+          putStrLn $ "[star-map @ " <> tableName <> "] all subtasks finished : " <> show rows
+          putStrLn $ "[star-map @ " <> tableName <> "] sum (aggregation demo) : " <> show (sum (snd <$> rows))
+        Nothing -> do
+          putStrLn $ "[star-map @ " <> tableName <> "] rescheduling to check again"
+          -- Need to reschedule starmap checking
+          let sj = W.mkDefaultSendJob' broker queueName sm
+          void $ W.sendJob' $ sj { W.delay = B.TimeoutS 5 }
 
     -- | A subtask which squares a number and stores in in a table, for `StarMap` to analyze
     SquareMap { pgConnString, x, tableName } -> do
@@ -109,10 +96,6 @@ performAction (W.State { broker, queueName }) bm = do
        msgId <- Aeson.throwDecode jMsgId :: IO Int
 
        putStrLn $ "[square-map @ " <> tableName <> " :: " <> show msgId <> "] x = " <> show x
-       let connInfo = T.encodeUtf8 $ T.pack pgConnString
-    
-       conn <- PSQL.connectPostgreSQL connInfo
 
-       let tName = PSQL.Identifier $ T.pack tableName
-       void $ PSQL.execute conn "INSERT INTO ? (message_id, value) VALUES (?, ?)" (tName, msgId, x*x)
+       insertResult pgConnString tableName msgId (x*x)
 
