@@ -40,6 +40,7 @@ Then run tests:
 ```shell
 cabal v2-test haskell-bee-pgmq --test-show-details=streaming
 ```
+(you can use `nix -L develop` if you miss things like `libgmp`).
 
 ### Redis
 
