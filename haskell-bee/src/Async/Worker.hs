@@ -123,7 +123,6 @@ runSingle' state@(State { .. }) = do
  
 handleMessage :: (HasWorkerBroker b a) => State b a -> BrokerMessage b (Job a) -> IO ()
 handleMessage state@(State { .. }) brokerMessage = do
-  callWorkerJobEvent onMessageReceived state brokerMessage
   let msgId = messageId brokerMessage
   let msg = getMessage brokerMessage
   let job' = toA msg
@@ -134,6 +133,11 @@ handleMessage state@(State { .. }) brokerMessage = do
   -- the broker from sending this task to another worker (e.g. 'vt' in
   -- PGMQ).
   setMessageTimeout broker queueName msgId (TimeoutS timeoutS)
+
+  -- It could happen that the `onMessageReceived` callback takes a
+  -- long time. Thus we want to `setMessageTimeout` first.
+  callWorkerJobEvent onMessageReceived state brokerMessage
+  
   -- mTimeout <- Timeout.timeout timeoutS (wrapPerformActionInJobException state brokerMessage)
   mTimeout <- Timeout.timeout ((fromIntegral timeoutS) * microsecond) (runAction state brokerMessage)
 
