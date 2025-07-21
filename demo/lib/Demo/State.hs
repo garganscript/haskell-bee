@@ -1,5 +1,3 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-
 module Demo.State where
 
 import Control.Monad (void)
@@ -11,6 +9,39 @@ import Database.PostgreSQL.Simple.FromField (FromField)
 import Database.PostgreSQL.Simple.ToField (ToField)
 import Database.PostgreSQL.Simple.Types qualified as PSQL  -- Identifier
 import Test.RandomStrings (randomASCII, randomString, onlyLower)
+
+
+
+data StateJob a b = StateJob
+  { a :: a
+  , pgConnString :: String
+  , prefix       :: String
+  , mTableName :: Maybe TableName
+  , mapAction :: TableName -> a -> IO [Int]
+  , aggregate :: [(Int, b)] -> IO ()
+  , childMessageIds :: [Int] }
+
+
+-- TODO StateJob is one a Job...
+-- runState :: (W.HasWorkerBroker PGMQBroker Job)
+--          => W.State PGMQBroker Job
+--          -> StateJob a b
+--          -> IO ()
+-- runState (W.State { broker, queueName }) (StateJob { mTableName = Nothing, .. }) = do
+--   tableName <- initTable pgConnString prefix
+--   msgIds <- mapAction tableName a
+--   -- TODO Spawn StateJob with
+--   -- `mTableName = Just tableName`, `childMessageIds = msgIds`
+-- runState (StateJob { mTableName = Just tableName, .. }) = do
+--   mRows <- collectWhenFinished pgConnString tableName childMessageIds
+--   case mRows of
+--     Just rows -> do
+--       aggregate rows
+--     Nothing -> do
+--       -- Need to reschedule starmap checking
+--       let sj = W.mkDefaultSendJob' broker queueName sm
+--       void $ W.sendJob' $ sj { W.delay = B.TimeoutS 5 }
+  
 
 
 type PgConnStr = String

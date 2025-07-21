@@ -71,10 +71,8 @@ performAction (W.State { broker, queueName }) bm = do
       let jMsgIds = Aeson.encode <$> msgIds
       let intMsgIds = catMaybes $ (\j -> Aeson.decode j :: Maybe Int) <$> jMsgIds
       let sj = W.mkDefaultSendJob' broker queueName $
-                 StarMap { pgConnString
-                         , mTableName = Just tableName
-                         , numJobs
-                         , messageIds = intMsgIds }
+                 sm { mTableName = Just tableName
+                    , messageIds = intMsgIds }
       void $ W.sendJob' $ sj { W.delay = B.TimeoutS 1 }
 
     -- | A task that watches given table and checks if all subtasks are finished
