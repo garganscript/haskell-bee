@@ -305,8 +305,8 @@ mkDefaultSendJob broker queue msg timeout =
           , archStrat = ASDelete
           -- | archive errored jobs (for inspection later)
           , errStrat = ESArchive
-          -- | repeat timed out jobs
-          , toStrat = TSRepeat
+          -- | repeat timed out jobs, but not infinitely
+          , toStrat = TSRepeatNElseArchive 2
           , timeout
           , resendOnKill = True }
 
