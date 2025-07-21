@@ -1,5 +1,5 @@
 {
-  description = "Haskell bee demo";
+  description = "Haskell bee";
 
   inputs = {
     systems.url = "github:nix-systems/x86_64-linux";
