@@ -42,6 +42,7 @@ instance QC.Arbitrary WT.JobMetadata where
     errorStrategy <- arbitrary
     timeoutStrategy <- arbitrary
     timeout <- arbitrary
+    additionalDelayAfterRead <- arbitrary
     readCount <- arbitrary
     resendWhenWorkerKilled <- arbitrary
     return $ WT.JobMetadata { .. }

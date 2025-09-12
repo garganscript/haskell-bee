@@ -155,6 +155,14 @@ data JobMetadata =
               -- | Time after which the job is considered to time-out
               -- (in seconds).
               , timeout          :: Timeout
+              -- | After reading a task, we want to inform the queue
+              -- so that it resends the task after given
+              -- 'timeout'. However, the above 'timeout' value is not
+              -- enough -- there can be a slight overlap before the
+              -- worker really finishes handling a timed out job and
+              -- when broker makes the task available. Hence this
+              -- setting (in seconds)
+              , additionalDelayAfterRead :: Timeout
               -- | Read count so we know how many times this message
               -- was processed
               , readCount        :: ReadCount
@@ -171,6 +179,7 @@ instance ToJSON JobMetadata where
         , "estrat" .= errorStrategy
         , "tstrat" .= timeoutStrategy
         , "timeout" .= timeout
+        , "additionalDelayAfterRead" .= additionalDelayAfterRead
         , "readCount" .= readCount
         , "resendWhenWorkerKilled" .= resendWhenWorkerKilled
         ]
@@ -180,6 +189,7 @@ instance FromJSON JobMetadata where
     errorStrategy <- o .: "estrat"
     timeoutStrategy <- o .: "tstrat"
     timeout <- o .: "timeout"
+    additionalDelayAfterRead <- o .: "additionalDelayAfterRead"
     readCount <- o .: "readCount"
     resendWhenWorkerKilled <- o .: "resendWhenWorkerKilled"
     return $ JobMetadata { .. }
@@ -192,6 +202,7 @@ defaultMetadata =
               , errorStrategy = ESArchive
               , timeoutStrategy = TSArchive
               , timeout = 10
+              , additionalDelayAfterRead = 3
               , readCount = 0
               , resendWhenWorkerKilled = True }
     
