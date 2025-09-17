@@ -132,7 +132,7 @@ handleMessage state@(State { .. }) brokerMessage = do
   -- Inform the broker how long a task could take. This way we prevent
   -- the broker from sending this task to another worker (e.g. 'vt' in
   -- PGMQ).
-  setMessageTimeout broker queueName msgId (TimeoutS timeoutS)
+  setMessageTimeout broker queueName msgId (TimeoutS $ timeoutS + additionalDelayAfterRead mdata)
 
   -- It could happen that the `onMessageReceived` callback takes a
   -- long time. Thus we want to `setMessageTimeout` first.
@@ -280,15 +280,16 @@ microsecond = 10^(6 :: Integer)
 
 -- | Wraps parameters for the 'sendJob' function
 data SendJob b a =
-  SendJob { broker       :: Broker b (Job a)
-          , queue        :: Queue
-          , msg          :: a
-          , delay        :: TimeoutS  -- initial delay for the message
-          , archStrat    :: ArchiveStrategy
-          , errStrat     :: ErrorStrategy
-          , toStrat      :: TimeoutStrategy
-          , timeout      :: Timeout
-          , resendOnKill :: Bool}
+  SendJob { broker            :: Broker b (Job a)
+          , queue             :: Queue
+          , msg               :: a
+          , delay             :: TimeoutS  -- initial delay for the message
+          , archStrat         :: ArchiveStrategy
+          , errStrat          :: ErrorStrategy
+          , toStrat           :: TimeoutStrategy
+          , timeout           :: Timeout
+          , addDelayAfterRead :: Timeout
+          , resendOnKill      :: Bool}
 
 -- | Create a 'SendJob' data with some defaults
 mkDefaultSendJob :: Broker b (Job a)
@@ -308,6 +309,7 @@ mkDefaultSendJob broker queue msg timeout =
           -- | repeat timed out jobs, but not infinitely
           , toStrat = TSRepeatNElseArchive 2
           , timeout
+          , addDelayAfterRead = 0
           , resendOnKill = True }
 
 
@@ -328,6 +330,7 @@ sendJob' (SendJob { .. }) = do
                                  , errorStrategy = errStrat
                                  , timeoutStrategy = toStrat
                                  , timeout = timeout
+                                 , additionalDelayAfterRead = addDelayAfterRead
                                  , resendWhenWorkerKilled = resendOnKill }
   let job = Job { job = msg, metadata }
   sendJobDelayed broker queue job delay

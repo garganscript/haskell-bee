@@ -17,7 +17,7 @@ module Test.Integration.Worker
  , multiWorkerTests )
 where
 
-import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat, resendOnKill, KillWorkerSafely(..))
+import Async.Worker (run, mkDefaultSendJob, mkDefaultSendJob', sendJob', errStrat, toStrat, addDelayAfterRead, resendOnKill, KillWorkerSafely(..))
 import Async.Worker.Broker.Types qualified as BT
 import Async.Worker.Types
 import Control.Concurrent (forkIO, killThread, threadDelay, ThreadId, throwTo)
@@ -26,6 +26,7 @@ import Control.Concurrent.STM.TVar (readTVarIO, newTVarIO, TVar, modifyTVar)
 import Control.Exception (bracket, Exception, throwIO)
 import Control.Monad (void)
 import Data.Aeson (ToJSON, FromJSON)
+import Data.List (sort)
 import Data.Maybe (fromJust, isJust)
 import Data.Set qualified as Set
 import GHC.Generics (Generic)
@@ -114,13 +115,14 @@ pushEventMMsg :: BT.MessageBroker b (Job Message)
 pushEventMMsg events evt mbm = atomically $ modifyTVar events (\e -> e ++ [evt $ job <$> BT.toA <$> BT.getMessage <$> mbm])
 
 
-initState :: (HasWorkerBroker b Message)
-          => BT.BrokerInitParams b (Job Message)
-          -> TVar [Event]
-          -> BT.Queue
-          -> String
-          -> IO (State b Message, ThreadId)
-initState bInitParams events queue workerName = do
+initStateDelayed :: (HasWorkerBroker b Message)
+                 => BT.BrokerInitParams b (Job Message)
+                 -> TVar [Event]
+                 -> BT.Queue
+                 -> String
+                 -> Int
+                 -> IO (State b Message, ThreadId)
+initStateDelayed bInitParams events queue workerName timeoutDelay = do
   let pushEvt evt _s = pushEvent events evt
 
   b' <- BT.initBroker bInitParams
@@ -130,13 +132,24 @@ initState bInitParams events queue workerName = do
                     , performAction = pa
                     , onMessageReceived = Just (pushEvt EMessageReceived)
                     , onJobFinish = Just (pushEvt EJobFinished)
-                    , onJobTimeout = Just (pushEvt EJobTimeout)
+                    , onJobTimeout = Just $ \evt s -> do
+                        pushEvt EJobTimeout evt s
+                        threadDelay timeoutDelay
                     , onJobError = Just (\_s bm _exc -> pushEvent events EJobError bm)
                     , onWorkerKilledSafely = Just (const $ pushEventMMsg events EWorkerKilledSafely) }
 
   threadId <- forkIO $ run state
 
   pure (state, threadId)
+
+
+initState :: (HasWorkerBroker b Message)
+          => BT.BrokerInitParams b (Job Message)
+          -> TVar [Event]
+          -> BT.Queue
+          -> String
+          -> IO (State b Message, ThreadId)
+initState bInitParams events queue workerName = initStateDelayed bInitParams events queue workerName 0
 
 
 withWorker :: (HasWorkerBroker b Message)
@@ -474,7 +487,7 @@ withWorkers brokerInitParams numWorkers = bracket (setUpWorkers brokerInitParams
       events <- newTVarIO []
 
       statesWithThreadIds <-
-        mapM (\idx -> initState bInitParams events queue ("test worker " <> show idx)) [1..numWorkers]
+        mapM (\idx -> initStateDelayed bInitParams events queue ("test worker " <> show idx) (200*1000)) [1..numWorkers]
       
       return $ TestEnvMulti { broker = b
                             , queueName = queue
@@ -542,7 +555,49 @@ multiWorkerTests brokerInitParams numWorkers =
       
     --   -- Queue should be empty, since we archive timed out jobs
     --   waitUntilQueueEmpty broker queueName 100
- 
+
+    it "can safely timeout a job, without another worker overlapping" $
+      \(TestEnvMulti { broker, queueName, events }) -> do
+        readTVarIO events >>= shouldBe []
+        BT.getQueueSize broker queueName >>= shouldBe 0
+
+        -- | This job will timeout. We want to make sure that no other
+        -- worker will process it.
+        let msg = Timeout { delay = 2 }
+        let job' = mkDefaultSendJob broker queueName msg 1
+        let job = job' { addDelayAfterRead = 1
+                       , toStrat = TSDelete }
+        void $ sendJob' job
+
+        waitUntilQueueEmpty broker queueName 2500
+        -- Need to wait to make sure no other worker picked that job
+        threadDelay (2000*1000)
+
+        let expected = [ EMessageReceived msg, EJobTimeout msg ]
+        readTVarIO events >>= shouldBe expected
+
+    it "will fail without additionalDelayAfterRead" $
+      \(TestEnvMulti { broker, queueName, events }) -> do
+        readTVarIO events >>= shouldBe []
+        BT.getQueueSize broker queueName >>= shouldBe 0
+
+        -- | This job will timeout. We want to make sure that no other
+        -- worker will process it.
+        let msg = Timeout { delay = 2 }
+        let job' = mkDefaultSendJob broker queueName msg 1
+        let job = job' { addDelayAfterRead = 0
+                       , toStrat = TSDelete }
+        void $ sendJob' job
+        
+        waitUntilQueueEmpty broker queueName 2500
+        -- Need to wait to make sure this times out and another worker
+        -- had a chance to pick it up in the meantime
+        threadDelay (2000*1000)
+
+        -- | Should have received this twice
+        let expected = [ EMessageReceived msg, EJobTimeout msg
+                       , EMessageReceived msg, EJobTimeout msg ]
+        readTVarIO events >>= (shouldBe $ sort expected) . sort
 
 second :: Int
 second = 1000 * millisecond
